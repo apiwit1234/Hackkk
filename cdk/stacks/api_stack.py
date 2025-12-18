@@ -18,7 +18,7 @@ class BedrockApiStack(Stack):
         # Get configuration from context or use defaults
         aws_region = self.node.try_get_context("aws_region") or "us-east-1"
         embedding_model = self.node.try_get_context("embedding_model") or "amazon.titan-embed-text-v2"
-        knowledge_base_id = self.node.try_get_context("knowledge_base_id") or "LCMAYLRJ7D"
+        knowledge_base_id = self.node.try_get_context("knowledge_base_id") or "R1DHVCY9K7"
         max_question_length = self.node.try_get_context("max_question_length") or "1000"
         retry_attempts = self.node.try_get_context("retry_attempts") or "3"
 

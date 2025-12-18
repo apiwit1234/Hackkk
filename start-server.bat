@@ -3,7 +3,7 @@ echo Setting up AWS Bedrock configuration...
 
 set AWS_REGION=us-east-1
 set BEDROCK_EMBEDDING_MODEL=amazon.titan-embed-text-v2
-set BEDROCK_KB_ID=LCMAYLRJ7D
+set BEDROCK_KB_ID=R1DHVCY9K7
 
 REM Set your AWS credentials here
 set AWS_ACCESS_KEY_ID=YOUR_ACCESS_KEY_ID_HERE

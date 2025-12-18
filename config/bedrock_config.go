@@ -23,7 +23,7 @@ func LoadConfig() (*Config, error) {
 	
 	config := &Config{
 		AWSRegion:         region,
-		EmbeddingModelId:  getEnv("BEDROCK_EMBEDDING_MODEL", "amazon.titan-embed-text-v2"),
+		EmbeddingModelId:  "anthropic.claude-sonnet-4-5-20250929-v1:0",
 		KnowledgeBaseId:   getEnv("BEDROCK_KB_ID", "R1DHVCY9K7"),
 		MaxQuestionLength: getEnvAsInt("MAX_QUESTION_LENGTH", 1000),
 		RetryAttempts:     getEnvAsInt("RETRY_ATTEMPTS", 3),
