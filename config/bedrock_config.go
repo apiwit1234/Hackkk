@@ -10,6 +10,7 @@ type Config struct {
 	AWSRegion         string
 	EmbeddingModelId  string
 	KnowledgeBaseId   string
+	GenerativeModelId string
 	MaxQuestionLength int
 	RetryAttempts     int
 }
@@ -25,6 +26,7 @@ func LoadConfig() (*Config, error) {
 		AWSRegion:         region,
 		EmbeddingModelId:  "anthropic.claude-sonnet-4-5-20250929-v1:0",
 		KnowledgeBaseId:   getEnv("BEDROCK_KB_ID", "R1DHVCY9K7"),
+		GenerativeModelId: getEnv("BEDROCK_GENERATIVE_MODEL", "anthropic.claude-3-5-sonnet-20240620-v1:0"),
 		MaxQuestionLength: getEnvAsInt("MAX_QUESTION_LENGTH", 1000),
 		RetryAttempts:     getEnvAsInt("RETRY_ATTEMPTS", 3),
 	}
@@ -45,6 +47,9 @@ func (c *Config) Validate() error {
 	}
 	if c.KnowledgeBaseId == "" {
 		return fmt.Errorf("BEDROCK_KB_ID is required")
+	}
+	if c.GenerativeModelId == "" {
+		return fmt.Errorf("BEDROCK_GENERATIVE_MODEL is required")
 	}
 	if c.MaxQuestionLength <= 0 {
 		return fmt.Errorf("MAX_QUESTION_LENGTH must be positive")

@@ -42,7 +42,7 @@ func init() {
 
 	// Create AWS clients
 	embeddingClient := aws.NewBedrockEmbeddingClient(awsCfg, cfg.EmbeddingModelId)
-	kbClient := aws.NewBedrockKBClient(awsCfg, cfg.KnowledgeBaseId)
+	kbClient := aws.NewBedrockKBClient(awsCfg, cfg.KnowledgeBaseId, cfg.GenerativeModelId, cfg.AWSRegion)
 
 	// Create service
 	questionSearchService := services.NewBedrockQuestionSearchService(

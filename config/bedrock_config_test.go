@@ -14,11 +14,12 @@ func TestConfigValidation_Property(t *testing.T) {
 	properties := gopter.NewProperties(nil)
 
 	properties.Property("valid config passes validation", prop.ForAll(
-		func(region, modelId, kbId string, maxLen, retries int) bool {
+		func(region, modelId, kbId, genModelId string, maxLen, retries int) bool {
 			config := &Config{
 				AWSRegion:         region,
 				EmbeddingModelId:  modelId,
 				KnowledgeBaseId:   kbId,
+				GenerativeModelId: genModelId,
 				MaxQuestionLength: maxLen,
 				RetryAttempts:     retries,
 			}
@@ -28,22 +29,25 @@ func TestConfigValidation_Property(t *testing.T) {
 		gen.AlphaString().SuchThat(func(s string) bool { return len(s) > 0 }), // region
 		gen.AlphaString().SuchThat(func(s string) bool { return len(s) > 0 }), // modelId
 		gen.AlphaString().SuchThat(func(s string) bool { return len(s) > 0 }), // kbId
+		gen.AlphaString().SuchThat(func(s string) bool { return len(s) > 0 }), // genModelId
 		gen.IntRange(1, 10000),   // maxLen
 		gen.IntRange(0, 10),      // retries
 	))
 
 	properties.Property("empty region fails validation", prop.ForAll(
-		func(modelId, kbId string, maxLen, retries int) bool {
+		func(modelId, kbId, genModelId string, maxLen, retries int) bool {
 			config := &Config{
 				AWSRegion:         "",
 				EmbeddingModelId:  modelId,
 				KnowledgeBaseId:   kbId,
+				GenerativeModelId: genModelId,
 				MaxQuestionLength: maxLen,
 				RetryAttempts:     retries,
 			}
 			err := config.Validate()
 			return err != nil
 		},
+		gen.AlphaString().SuchThat(func(s string) bool { return len(s) > 0 }),
 		gen.AlphaString().SuchThat(func(s string) bool { return len(s) > 0 }),
 		gen.AlphaString().SuchThat(func(s string) bool { return len(s) > 0 }),
 		gen.IntRange(1, 10000),
@@ -51,17 +55,19 @@ func TestConfigValidation_Property(t *testing.T) {
 	))
 
 	properties.Property("empty embedding model fails validation", prop.ForAll(
-		func(region, kbId string, maxLen, retries int) bool {
+		func(region, kbId, genModelId string, maxLen, retries int) bool {
 			config := &Config{
 				AWSRegion:         region,
 				EmbeddingModelId:  "",
 				KnowledgeBaseId:   kbId,
+				GenerativeModelId: genModelId,
 				MaxQuestionLength: maxLen,
 				RetryAttempts:     retries,
 			}
 			err := config.Validate()
 			return err != nil
 		},
+		gen.AlphaString().SuchThat(func(s string) bool { return len(s) > 0 }),
 		gen.AlphaString().SuchThat(func(s string) bool { return len(s) > 0 }),
 		gen.AlphaString().SuchThat(func(s string) bool { return len(s) > 0 }),
 		gen.IntRange(1, 10000),
@@ -69,11 +75,12 @@ func TestConfigValidation_Property(t *testing.T) {
 	))
 
 	properties.Property("empty knowledge base ID fails validation", prop.ForAll(
-		func(region, modelId string, maxLen, retries int) bool {
+		func(region, modelId, genModelId string, maxLen, retries int) bool {
 			config := &Config{
 				AWSRegion:         region,
 				EmbeddingModelId:  modelId,
 				KnowledgeBaseId:   "",
+				GenerativeModelId: genModelId,
 				MaxQuestionLength: maxLen,
 				RetryAttempts:     retries,
 			}
@@ -82,16 +89,38 @@ func TestConfigValidation_Property(t *testing.T) {
 		},
 		gen.AlphaString().SuchThat(func(s string) bool { return len(s) > 0 }),
 		gen.AlphaString().SuchThat(func(s string) bool { return len(s) > 0 }),
+		gen.AlphaString().SuchThat(func(s string) bool { return len(s) > 0 }),
+		gen.IntRange(1, 10000),
+		gen.IntRange(0, 10),
+	))
+
+	properties.Property("empty generative model fails validation", prop.ForAll(
+		func(region, modelId, kbId string, maxLen, retries int) bool {
+			config := &Config{
+				AWSRegion:         region,
+				EmbeddingModelId:  modelId,
+				KnowledgeBaseId:   kbId,
+				GenerativeModelId: "",
+				MaxQuestionLength: maxLen,
+				RetryAttempts:     retries,
+			}
+			err := config.Validate()
+			return err != nil
+		},
+		gen.AlphaString().SuchThat(func(s string) bool { return len(s) > 0 }),
+		gen.AlphaString().SuchThat(func(s string) bool { return len(s) > 0 }),
+		gen.AlphaString().SuchThat(func(s string) bool { return len(s) > 0 }),
 		gen.IntRange(1, 10000),
 		gen.IntRange(0, 10),
 	))
 
 	properties.Property("non-positive max question length fails validation", prop.ForAll(
-		func(region, modelId, kbId string, retries int) bool {
+		func(region, modelId, kbId, genModelId string, retries int) bool {
 			config := &Config{
 				AWSRegion:         region,
 				EmbeddingModelId:  modelId,
 				KnowledgeBaseId:   kbId,
+				GenerativeModelId: genModelId,
 				MaxQuestionLength: 0,
 				RetryAttempts:     retries,
 			}
@@ -101,21 +130,24 @@ func TestConfigValidation_Property(t *testing.T) {
 		gen.AlphaString().SuchThat(func(s string) bool { return len(s) > 0 }),
 		gen.AlphaString().SuchThat(func(s string) bool { return len(s) > 0 }),
 		gen.AlphaString().SuchThat(func(s string) bool { return len(s) > 0 }),
+		gen.AlphaString().SuchThat(func(s string) bool { return len(s) > 0 }),
 		gen.IntRange(0, 10),
 	))
 
 	properties.Property("negative retry attempts fails validation", prop.ForAll(
-		func(region, modelId, kbId string, maxLen int) bool {
+		func(region, modelId, kbId, genModelId string, maxLen int) bool {
 			config := &Config{
 				AWSRegion:         region,
 				EmbeddingModelId:  modelId,
 				KnowledgeBaseId:   kbId,
+				GenerativeModelId: genModelId,
 				MaxQuestionLength: maxLen,
 				RetryAttempts:     -1,
 			}
 			err := config.Validate()
 			return err != nil
 		},
+		gen.AlphaString().SuchThat(func(s string) bool { return len(s) > 0 }),
 		gen.AlphaString().SuchThat(func(s string) bool { return len(s) > 0 }),
 		gen.AlphaString().SuchThat(func(s string) bool { return len(s) > 0 }),
 		gen.AlphaString().SuchThat(func(s string) bool { return len(s) > 0 }),

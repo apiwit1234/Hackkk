@@ -55,45 +55,31 @@ func TestKBResultExtraction_Property(t *testing.T) {
 	properties.TestingRun(t, gopter.ConsoleReporter(false))
 }
 
-// Feature: bedrock-question-search, Property 7: Multiple candidates return highest confidence answer
+// Feature: bedrock-question-search, Property 7: RetrieveAndGenerate returns AI-generated answer
 // Validates: Requirements 4.3
-func TestHighestConfidenceSelection_Property(t *testing.T) {
+func TestRetrieveAndGenerate_Property(t *testing.T) {
 	properties := gopter.NewProperties(nil)
 
-	properties.Property("highest confidence answer is selected", prop.ForAll(
-		func(answers []string, scores []float64) bool {
-			if len(answers) == 0 || len(scores) == 0 || len(answers) != len(scores) {
-				return true // Skip invalid inputs
+	properties.Property("generated answer is returned correctly", prop.ForAll(
+		func(generatedAnswer string) bool {
+			if len(generatedAnswer) == 0 {
+				return true // Skip empty inputs
 			}
 
-			// Find expected highest score index
-			maxIdx := 0
-			maxScore := scores[0]
-			for i, score := range scores {
-				if score > maxScore {
-					maxScore = score
-					maxIdx = i
-				}
+			mockClient := &MockKBClient{
+				response: generatedAnswer,
 			}
 
-			mockClient := &MockKBClientWithScores{
-				answers: answers,
-				scores:  scores,
-			}
-
-			result, err := mockClient.QueryKnowledgeBase(context.Background(), "test")
+			result, err := mockClient.QueryKnowledgeBase(context.Background(), "test question")
 
 			if err != nil {
 				return false
 			}
 
-			// Should return the answer with highest score
-			return result == answers[maxIdx]
+			// Should return the generated answer
+			return result == generatedAnswer
 		},
-		gen.SliceOf(gen.AlphaString().SuchThat(func(s string) bool { return len(s) > 0 })).
-			SuchThat(func(s []string) bool { return len(s) > 0 && len(s) <= 10 }),
-		gen.SliceOf(gen.Float64Range(0.0, 1.0)).
-			SuchThat(func(s []float64) bool { return len(s) > 0 && len(s) <= 10 }),
+		gen.AlphaString().SuchThat(func(s string) bool { return len(s) > 0 }),
 	))
 
 	properties.TestingRun(t, gopter.ConsoleReporter(false))
@@ -149,27 +135,7 @@ func TestBedrockKBClient_HandleAWSError(t *testing.T) {
 	}
 }
 
-func TestGetScore(t *testing.T) {
-	tests := []struct {
-		name     string
-		score    *float32
-		expected float64
-	}{
-		{"with score", float32Ptr(0.85), 0.85},
-		{"nil score", nil, 0.0},
-		{"zero score", float32Ptr(0.0), 0.0},
-		{"max score", float32Ptr(1.0), 1.0},
-	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := getScore(mockRetrievalResult(tt.score))
-			if result != tt.expected {
-				t.Errorf("getScore() = %v, want %v", result, tt.expected)
-			}
-		})
-	}
-}
 
 // Mock clients for testing
 type MockKBClient struct {
@@ -184,45 +150,4 @@ func (m *MockKBClient) QueryKnowledgeBase(ctx context.Context, question string) 
 	return m.response, nil
 }
 
-type MockKBClientWithScores struct {
-	answers []string
-	scores  []float64
-}
 
-func (m *MockKBClientWithScores) QueryKnowledgeBase(ctx context.Context, question string) (string, error) {
-	if len(m.answers) == 0 {
-		return "", nil
-	}
-
-	// Find highest score
-	maxIdx := 0
-	maxScore := m.scores[0]
-	for i, score := range m.scores {
-		if score > maxScore {
-			maxScore = score
-			maxIdx = i
-		}
-	}
-
-	return m.answers[maxIdx], nil
-}
-
-func float32Ptr(f float32) *float32 {
-	return &f
-}
-
-func mockRetrievalResult(score *float32) mockResult {
-	return mockResult{score: score}
-}
-
-type mockResult struct {
-	score *float32
-}
-
-// Adapter to match the getScore function signature
-func getScoreFromMock(m mockResult) float64 {
-	if m.score != nil {
-		return float64(*m.score)
-	}
-	return 0.0
-}
