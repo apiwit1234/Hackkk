@@ -16,7 +16,8 @@ type QuestionSearchRequest struct {
 }
 
 type QuestionSearchResponse struct {
-	Answer string `json:"answer"`
+	Answer           string   `json:"answer"`
+	RelatedDocuments []string `json:"relatedDocuments"`
 }
 
 type QuestionSearchHandler struct {
@@ -95,9 +96,15 @@ func (h *QuestionSearchHandler) Handle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Parse query parameter for enableRelateDocument
+	enableRelateDocument := false
+	if r.URL.Query().Get("enableRelateDocument") == "true" {
+		enableRelateDocument = true
+	}
+
 	// Call service layer
 	ctx := r.Context()
-	answer, err := h.service.SearchAnswer(ctx, request.Question)
+	answer, relatedDocuments, err := h.service.SearchAnswer(ctx, request.Question, enableRelateDocument)
 
 	if err != nil {
 		h.handleError(w, r, err)
@@ -106,11 +113,13 @@ func (h *QuestionSearchHandler) Handle(w http.ResponseWriter, r *http.Request) {
 
 	// Format success response
 	response := QuestionSearchResponse{
-		Answer: answer,
+		Answer:           answer,
+		RelatedDocuments: relatedDocuments,
 	}
 
 	log.Info("Request completed successfully", map[string]interface{}{
-		"answer_length": len(answer),
+		"answer_length":  len(answer),
+		"document_count": len(relatedDocuments),
 	})
 
 	w.Header().Set("Content-Type", "application/json")

@@ -20,7 +20,7 @@ func TestKBResultExtraction_Property(t *testing.T) {
 				response: answerText,
 			}
 
-			result, err := mockClient.QueryKnowledgeBase(context.Background(), "test question")
+			result, _, err := mockClient.QueryKnowledgeBase(context.Background(), "test question", false)
 
 			// Should not error
 			if err != nil {
@@ -39,7 +39,7 @@ func TestKBResultExtraction_Property(t *testing.T) {
 				response: "",
 			}
 
-			result, err := mockClient.QueryKnowledgeBase(context.Background(), question)
+			result, _, err := mockClient.QueryKnowledgeBase(context.Background(), question, false)
 
 			// Should not error
 			if err != nil {
@@ -70,7 +70,7 @@ func TestRetrieveAndGenerate_Property(t *testing.T) {
 				response: generatedAnswer,
 			}
 
-			result, err := mockClient.QueryKnowledgeBase(context.Background(), "test question")
+			result, _, err := mockClient.QueryKnowledgeBase(context.Background(), "test question", false)
 
 			if err != nil {
 				return false
@@ -143,11 +143,11 @@ type MockKBClient struct {
 	err      error
 }
 
-func (m *MockKBClient) QueryKnowledgeBase(ctx context.Context, question string) (string, error) {
+func (m *MockKBClient) QueryKnowledgeBase(ctx context.Context, question string, enableRelateDocument bool) (string, []string, error) {
 	if m.err != nil {
-		return "", m.err
+		return "", nil, m.err
 	}
-	return m.response, nil
+	return m.response, []string{}, nil
 }
 
 

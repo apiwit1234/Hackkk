@@ -11,7 +11,7 @@ import (
 )
 
 type QuestionSearchService interface {
-	SearchAnswer(ctx context.Context, question string) (string, error)
+	SearchAnswer(ctx context.Context, question string, enableRelateDocument bool) (string, []string, error)
 }
 
 type BedrockQuestionSearchService struct {
@@ -32,7 +32,7 @@ func NewBedrockQuestionSearchService(
 	}
 }
 
-func (s *BedrockQuestionSearchService) SearchAnswer(ctx context.Context, question string) (string, error) {
+func (s *BedrockQuestionSearchService) SearchAnswer(ctx context.Context, question string, enableRelateDocument bool) (string, []string, error) {
 	// Log incoming request for audit
 	log := logger.WithContext(ctx)
 	log.Info("Question search request received", map[string]interface{}{
@@ -43,6 +43,7 @@ func (s *BedrockQuestionSearchService) SearchAnswer(ctx context.Context, questio
 
 	// Query knowledge base with retry logic
 	var answer string
+	var relatedDocuments []string
 	retryConfig := utils.RetryConfig{
 		MaxAttempts:       s.config.RetryAttempts,
 		InitialBackoff:    100 * time.Millisecond,
@@ -52,7 +53,7 @@ func (s *BedrockQuestionSearchService) SearchAnswer(ctx context.Context, questio
 
 	err := utils.RetryWithBackoff(ctx, retryConfig, func() error {
 		// Query knowledge base directly with question text
-		ans, err := s.knowledgeBaseClient.QueryKnowledgeBase(ctx, question)
+		ans, docs, err := s.knowledgeBaseClient.QueryKnowledgeBase(ctx, question, enableRelateDocument)
 		if err != nil {
 			log.Error("Knowledge base query failed", map[string]interface{}{
 				"error": err.Error(),
@@ -60,6 +61,7 @@ func (s *BedrockQuestionSearchService) SearchAnswer(ctx context.Context, questio
 			return err
 		}
 		answer = ans
+		relatedDocuments = docs
 		return nil
 	})
 
@@ -70,15 +72,16 @@ func (s *BedrockQuestionSearchService) SearchAnswer(ctx context.Context, questio
 			"duration_ms":  duration.Milliseconds(),
 			"retry_count":  s.config.RetryAttempts,
 		})
-		return "", err
+		return "", nil, err
 	}
 
 	// Log successful response
 	duration := time.Since(startTime)
 	log.Info("Question search completed successfully", map[string]interface{}{
-		"duration_ms":   duration.Milliseconds(),
-		"answer_length": len(answer),
+		"duration_ms":      duration.Milliseconds(),
+		"answer_length":    len(answer),
+		"document_count":   len(relatedDocuments),
 	})
 
-	return answer, nil
+	return answer, relatedDocuments, nil
 }
