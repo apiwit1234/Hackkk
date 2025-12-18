@@ -34,7 +34,18 @@ func NewBedrockKBClient(cfg aws.Config, knowledgeBaseId string, generativeModelI
 }
 
 func (c *BedrockKBClient) QueryKnowledgeBase(ctx context.Context, question string, enableRelateDocument bool) (string, []string, error) {
-	modelArn := fmt.Sprintf("arn:aws:bedrock:%s::foundation-model/%s", c.region, c.generativeModelId)
+	// Build the correct model identifier based on model type
+	var modelArn string
+	if strings.HasPrefix(c.generativeModelId, "arn:") {
+		// Already an ARN, use as-is
+		modelArn = c.generativeModelId
+	} else if strings.Contains(c.generativeModelId, "anthropic.claude") && strings.Contains(c.generativeModelId, "haiku") {
+		// For Claude Haiku models, use cross-region inference profile ID (not ARN)
+		modelArn = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
+	} else {
+		// Standard foundation model ARN
+		modelArn = fmt.Sprintf("arn:aws:bedrock:%s::foundation-model/%s", c.region, c.generativeModelId)
+	}
 
 	kbConfig := &types.KnowledgeBaseRetrieveAndGenerateConfiguration{
 		KnowledgeBaseId: aws.String(c.knowledgeBaseId),
@@ -89,8 +100,6 @@ func (c *BedrockKBClient) QueryKnowledgeBase(ctx context.Context, question strin
 	return "ไม่พบคำตอบที่เกี่ยวข้องกับคำถามของคุณ", relatedDocuments, nil
 }
 
-
-
 func (c *BedrockKBClient) convertS3UriToPublicUrl(s3Uri string) string {
 	s3Uri = strings.TrimPrefix(s3Uri, "s3://")
 	parts := strings.SplitN(s3Uri, "/", 2)
@@ -118,7 +127,7 @@ func (c *BedrockKBClient) handleAWSError(err error) error {
 	}
 
 	if contains(errMsg, "ResourceNotFoundException") {
-		return errors.NewKnowledgeBaseError("knowledge base not found", err)
+		return errors.NewKnowledgeBaseError(fmt.Sprintf("resource not found: %v", err), err)
 	}
 
 	if contains(errMsg, "ServiceUnavailableException") || contains(errMsg, "InternalServerException") {

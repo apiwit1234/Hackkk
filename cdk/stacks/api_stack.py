@@ -18,7 +18,7 @@ class BedrockApiStack(Stack):
         # Get configuration from context or use defaults
         aws_region = self.node.try_get_context("aws_region") or "us-east-1"
         embedding_model = self.node.try_get_context("embedding_model") or "amazon.titan-embed-text-v2"
-        knowledge_base_id = self.node.try_get_context("knowledge_base_id") or "R1DHVCY9K7"
+        knowledge_base_id = "R1DHVCY9K7"  # Hardcoded Knowledge Base ID
         max_question_length = self.node.try_get_context("max_question_length") or "1000"
         retry_attempts = self.node.try_get_context("retry_attempts") or "3"
 
@@ -56,9 +56,12 @@ class BedrockApiStack(Stack):
                 actions=[
                     "bedrock:Retrieve",
                     "bedrock:RetrieveAndGenerate",
+                    "bedrock:InvokeModel",
                 ],
                 resources=[
                     f"arn:aws:bedrock:{aws_region}:{self.account}:knowledge-base/{knowledge_base_id}",
+                    f"arn:aws:bedrock:*::foundation-model/*",
+                    "arn:aws:bedrock:*:*:inference-profile/*",
                 ],
             )
         )

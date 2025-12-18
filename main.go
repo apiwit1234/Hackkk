@@ -51,7 +51,7 @@ func main() {
 	if logLevel == "" {
 		logLevel = "ERROR" // Default to ERROR
 	}
-	
+
 	switch logLevel {
 	case "DEBUG":
 		logger.SetLogLevel(logger.DEBUG)
@@ -71,9 +71,10 @@ func main() {
 	// Create AWS clients
 	embeddingClient := aws.NewBedrockEmbeddingClient(awsCfg, cfg.EmbeddingModelId)
 	kbClient := aws.NewBedrockKBClient(awsCfg, cfg.KnowledgeBaseId, cfg.GenerativeModelId, cfg.AWSRegion, cfg.SystemInstructions)
+	openSearchClient := aws.NewBedrockOpenSearchClient(awsCfg, cfg.KnowledgeBaseId, cfg.AWSRegion, kbClient, cfg.GenerativeModelId)
 	log.Println("AWS Bedrock clients initialized")
 
-	// Create service
+	// Create services
 	questionSearchService := services.NewBedrockQuestionSearchService(
 		embeddingClient,
 		kbClient,
@@ -81,9 +82,15 @@ func main() {
 	)
 	log.Println("Question search service created")
 
-	// Setup routes with service
-	router := routing.SetupRoutes(questionSearchService, cfg.MaxQuestionLength)
-	
+	documentDetailsService := services.NewOpenSearchDocumentService(
+		openSearchClient,
+		cfg,
+	)
+	log.Println("Document details service created")
+
+	// Setup routes with services
+	router := routing.SetupRoutes(questionSearchService, documentDetailsService, cfg.MaxQuestionLength)
+
 	log.Println("Server starting on :8080")
 	if err := http.ListenAndServe(":8080", router); err != nil {
 		logger.Error("Server failed", map[string]interface{}{"error": err.Error()})

@@ -19,6 +19,8 @@ type Config struct {
 	SystemInstructions string
 	MaxQuestionLength  int
 	RetryAttempts      int
+	OpenSearchEndpoint string
+	OpenSearchIndex    string
 }
 
 func LoadConfig() (*Config, error) {
@@ -30,11 +32,13 @@ func LoadConfig() (*Config, error) {
 	config := &Config{
 		AWSRegion:          region,
 		EmbeddingModelId:   getEnv("BEDROCK_EMBEDDING_MODEL", "amazon.titan-embed-text-v2:0"),
-		KnowledgeBaseId:    getEnv("BEDROCK_KB_ID", "R1DHVCY9K7"),
-		GenerativeModelId:  getEnv("BEDROCK_GENERATIVE_MODEL", "amazon.nova-pro-v1:0"),
+		KnowledgeBaseId:    "R1DHVCY9K7",                                                                   // Hardcoded Knowledge Base ID
+		GenerativeModelId:  getEnv("BEDROCK_GENERATIVE_MODEL", "anthropic.claude-haiku-4-5-20251001-v1:0"), // Claude 3.5 Haiku
 		SystemInstructions: strings.TrimSpace(systemInstructions),
 		MaxQuestionLength:  getEnvAsInt("MAX_QUESTION_LENGTH", 1000),
 		RetryAttempts:      getEnvAsInt("RETRY_ATTEMPTS", 3),
+		OpenSearchEndpoint: getEnv("OPENSEARCH_ENDPOINT", ""),
+		OpenSearchIndex:    getEnv("OPENSEARCH_INDEX", "bedrock-knowledge-base-default-index"),
 	}
 
 	if err := config.Validate(); err != nil {

@@ -50,16 +50,22 @@ func init() {
 	// Create AWS clients
 	embeddingClient := aws.NewBedrockEmbeddingClient(awsCfg, cfg.EmbeddingModelId)
 	kbClient := aws.NewBedrockKBClient(awsCfg, cfg.KnowledgeBaseId, cfg.GenerativeModelId, cfg.AWSRegion, cfg.SystemInstructions)
+	openSearchClient := aws.NewBedrockOpenSearchClient(awsCfg, cfg.KnowledgeBaseId, cfg.AWSRegion, kbClient, cfg.GenerativeModelId)
 
-	// Create service
+	// Create services
 	questionSearchService := services.NewBedrockQuestionSearchService(
 		embeddingClient,
 		kbClient,
 		cfg,
 	)
 
+	documentDetailsService := services.NewOpenSearchDocumentService(
+		openSearchClient,
+		cfg,
+	)
+
 	// Setup routes
-	router := routing.SetupRoutes(questionSearchService, cfg.MaxQuestionLength)
+	router := routing.SetupRoutes(questionSearchService, documentDetailsService, cfg.MaxQuestionLength)
 
 	// Create Lambda adapter for API Gateway V2 (HTTP API)
 	httpLambda = httpadapter.NewV2(router)
