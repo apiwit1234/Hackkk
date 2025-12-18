@@ -144,6 +144,7 @@ Environment variables:
 | `BEDROCK_KB_ID` | Knowledge Base ID | Required |
 | `MAX_QUESTION_LENGTH` | Max question length | 1000 |
 | `RETRY_ATTEMPTS` | Number of retries | 3 |
+| `LOG_LEVEL` | Logging level (DEBUG, INFO, WARN, ERROR) | ERROR |
 
 ## Cost Estimation
 
@@ -156,13 +157,67 @@ AWS Lambda deployment costs (approximate):
 
 First 1M Lambda requests per month are free.
 
+## Logging
+
+The API includes CloudWatch logging with configurable log levels:
+
+### Log Levels
+- **DEBUG**: Detailed debugging information
+- **INFO**: General information (requests, responses, configuration)
+- **WARN**: Warnings (validation errors, throttling)
+- **ERROR**: Errors only (default for production)
+
+### Configuration
+Set the `LOG_LEVEL` environment variable:
+```bash
+LOG_LEVEL=ERROR  # Default - only errors
+LOG_LEVEL=WARN   # Warnings and errors
+LOG_LEVEL=INFO   # Info, warnings, and errors
+LOG_LEVEL=DEBUG  # All logs
+```
+
+### Log Groups
+- **Lambda**: `/aws/lambda/{function-name}` (uses standard output, CloudWatch handles automatically)
+- **Container/Local**: `/teletubpax-api/local` (sends to CloudWatch Logs)
+
+### Structured Logging
+Error logs include structured fields for easy filtering:
+```json
+{
+  "level": "ERROR",
+  "message": "Question search failed after retries",
+  "error": "ThrottlingException",
+  "duration_ms": 5000,
+  "retry_count": 3
+}
+```
+
 ## Monitoring
 
 After deployment, monitor your API:
 
 - **CloudWatch Logs**: `/aws/lambda/BedrockApiStack-BedrockApiFunction-*`
+- **CloudWatch Insights**: Query structured logs for analysis
 - **API Gateway Metrics**: Request count, latency, errors
 - **Lambda Metrics**: Invocations, duration, errors
+
+### Example CloudWatch Insights Queries
+
+```
+# Find all errors
+fields @timestamp, message, error
+| filter level = "ERROR"
+| sort @timestamp desc
+
+# Track request duration
+fields @timestamp, duration_ms
+| filter message = "Question search completed successfully"
+| stats avg(duration_ms), max(duration_ms), min(duration_ms)
+
+# Monitor throttling
+fields @timestamp, message
+| filter level = "WARN" and message like /throttled/
+```
 
 ## Security
 

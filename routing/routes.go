@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"teletubpax-api/logger"
 	"teletubpax-api/services"
 
 	"github.com/gorilla/mux"
@@ -47,6 +48,12 @@ func HealthCheckHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func NotFoundHandler(w http.ResponseWriter, r *http.Request) {
+	log := logger.WithContext(r.Context())
+	log.Warn("Resource not found", map[string]interface{}{
+		"path":   r.URL.Path,
+		"method": r.Method,
+	})
+
 	errorResponse := ErrorResponse{
 		Error:  "Resource not found",
 		Status: 404,

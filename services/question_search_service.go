@@ -2,11 +2,11 @@ package services
 
 import (
 	"context"
-	"log"
 	"time"
 
 	"teletubpax-api/aws"
 	"teletubpax-api/config"
+	"teletubpax-api/logger"
 	"teletubpax-api/utils"
 )
 
@@ -34,7 +34,11 @@ func NewBedrockQuestionSearchService(
 
 func (s *BedrockQuestionSearchService) SearchAnswer(ctx context.Context, question string) (string, error) {
 	// Log incoming request for audit
-	log.Printf("[AUDIT] Question search request: %s", question)
+	log := logger.WithContext(ctx)
+	log.Info("Question search request received", map[string]interface{}{
+		"question_length": len(question),
+		"question":        question,
+	})
 	startTime := time.Now()
 
 	// Query knowledge base with retry logic
@@ -50,7 +54,9 @@ func (s *BedrockQuestionSearchService) SearchAnswer(ctx context.Context, questio
 		// Query knowledge base directly with question text
 		ans, err := s.knowledgeBaseClient.QueryKnowledgeBase(ctx, question)
 		if err != nil {
-			log.Printf("[ERROR] Knowledge base query failed: %v", err)
+			log.Error("Knowledge base query failed", map[string]interface{}{
+				"error": err.Error(),
+			})
 			return err
 		}
 		answer = ans
@@ -58,13 +64,21 @@ func (s *BedrockQuestionSearchService) SearchAnswer(ctx context.Context, questio
 	})
 
 	if err != nil {
-		log.Printf("[ERROR] Question search failed after retries: %v", err)
+		duration := time.Since(startTime)
+		log.Error("Question search failed after retries", map[string]interface{}{
+			"error":        err.Error(),
+			"duration_ms":  duration.Milliseconds(),
+			"retry_count":  s.config.RetryAttempts,
+		})
 		return "", err
 	}
 
 	// Log successful response
 	duration := time.Since(startTime)
-	log.Printf("[INFO] Question search completed successfully in %v", duration)
+	log.Info("Question search completed successfully", map[string]interface{}{
+		"duration_ms":   duration.Milliseconds(),
+		"answer_length": len(answer),
+	})
 
 	return answer, nil
 }

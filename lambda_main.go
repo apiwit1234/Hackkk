@@ -9,6 +9,7 @@ package main
 import (
 	"context"
 	"log"
+	"os"
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
@@ -17,6 +18,7 @@ import (
 
 	"teletubpax-api/aws"
 	"teletubpax-api/config"
+	"teletubpax-api/logger"
 	"teletubpax-api/routing"
 	"teletubpax-api/services"
 )
@@ -29,8 +31,6 @@ func init() {
 	if err != nil {
 		log.Fatalf("Failed to load configuration: %v", err)
 	}
-	log.Printf("Configuration loaded: Region=%s, Model=%s, KB=%s",
-		cfg.AWSRegion, cfg.EmbeddingModelId, cfg.KnowledgeBaseId)
 
 	// Initialize AWS SDK config
 	awsCfg, err := awsConfig.LoadDefaultConfig(context.Background(),
@@ -39,6 +39,12 @@ func init() {
 	if err != nil {
 		log.Fatalf("Failed to load AWS configuration: %v", err)
 	}
+
+	// Initialize Standard Logger for Lambda (CloudWatch handles logs automatically)
+	logger.Initialize(&logger.StandardLogger{})
+	logger.SetLogLevel(logger.ERROR) // Only log errors in Lambda
+	
+	log.Printf("Lambda initialization started for function: %s", os.Getenv("AWS_LAMBDA_FUNCTION_NAME"))
 
 	// Create AWS clients
 	embeddingClient := aws.NewBedrockEmbeddingClient(awsCfg, cfg.EmbeddingModelId)
@@ -56,6 +62,8 @@ func init() {
 
 	// Create Lambda adapter for API Gateway V2 (HTTP API)
 	httpLambda = httpadapter.NewV2(router)
+	
+	log.Println("Lambda initialization completed successfully")
 }
 
 func Handler(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
