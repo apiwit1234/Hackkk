@@ -17,3 +17,26 @@ vendor/
 
 # Go workspace file
 go.work
+
+# Environment variables
+.env
+
+# CDK
+cdk.out/
+cdk/__pycache__/
+cdk/**/__pycache__/
+cdk/*.egg-info/
+.cdk.staging/
+
+# Lambda build artifacts
+lambda-build/
+
+# Python
+*.pyc
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+venv/
+env/
+ENV/

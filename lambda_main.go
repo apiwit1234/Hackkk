@@ -1,10 +1,18 @@
+// +build lambda
+
+// Lambda entry point for AWS deployment
+// This file is used when building for Lambda (go build -tags lambda)
+// For local development, use main.go instead
+
 package main
 
 import (
 	"context"
 	"log"
-	"net/http"
 
+	"github.com/aws/aws-lambda-go/events"
+	"github.com/aws/aws-lambda-go/lambda"
+	"github.com/awslabs/aws-lambda-go-api-proxy/httpadapter"
 	awsConfig "github.com/aws/aws-sdk-go-v2/config"
 
 	"teletubpax-api/aws"
@@ -13,13 +21,15 @@ import (
 	"teletubpax-api/services"
 )
 
-func main() {
+var httpLambda *httpadapter.HandlerAdapterV2
+
+func init() {
 	// Load configuration
 	cfg, err := config.LoadConfig()
 	if err != nil {
 		log.Fatalf("Failed to load configuration: %v", err)
 	}
-	log.Printf("Configuration loaded successfully: Region=%s, Model=%s, KB=%s", 
+	log.Printf("Configuration loaded: Region=%s, Model=%s, KB=%s",
 		cfg.AWSRegion, cfg.EmbeddingModelId, cfg.KnowledgeBaseId)
 
 	// Initialize AWS SDK config
@@ -29,12 +39,10 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to load AWS configuration: %v", err)
 	}
-	log.Println("AWS SDK configured successfully")
 
 	// Create AWS clients
 	embeddingClient := aws.NewBedrockEmbeddingClient(awsCfg, cfg.EmbeddingModelId)
 	kbClient := aws.NewBedrockKBClient(awsCfg, cfg.KnowledgeBaseId)
-	log.Println("AWS Bedrock clients initialized")
 
 	// Create service
 	questionSearchService := services.NewBedrockQuestionSearchService(
@@ -42,13 +50,18 @@ func main() {
 		kbClient,
 		cfg,
 	)
-	log.Println("Question search service created")
 
-	// Setup routes with service
+	// Setup routes
 	router := routing.SetupRoutes(questionSearchService, cfg.MaxQuestionLength)
-	
-	log.Println("Server starting on :8080")
-	if err := http.ListenAndServe(":8080", router); err != nil {
-		log.Fatal(err)
-	}
+
+	// Create Lambda adapter for API Gateway V2 (HTTP API)
+	httpLambda = httpadapter.NewV2(router)
+}
+
+func Handler(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
+	return httpLambda.ProxyWithContext(ctx, req)
+}
+
+func main() {
+	lambda.Start(Handler)
 }

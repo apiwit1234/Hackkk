@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"teletubpax-api/services"
+
 	"github.com/gorilla/mux"
 )
 
@@ -17,11 +19,15 @@ type ErrorResponse struct {
 	Status int    `json:"status"`
 }
 
-func SetupRoutes() *mux.Router {
+func SetupRoutes(questionSearchService services.QuestionSearchService, maxQuestionLength int) *mux.Router {
 	router := mux.NewRouter()
 	
 	// Health check endpoint
 	router.HandleFunc("/api/teletubpax/healthcheck", HealthCheckHandler).Methods("GET")
+	
+	// Question search endpoint
+	questionSearchHandler := NewQuestionSearchHandler(questionSearchService, maxQuestionLength)
+	router.HandleFunc("/api/teletubpax/question-search", questionSearchHandler.Handle).Methods("POST")
 	
 	// 404 handler
 	router.NotFoundHandler = http.HandlerFunc(NotFoundHandler)
