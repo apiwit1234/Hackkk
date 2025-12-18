@@ -15,60 +15,53 @@ type KnowledgeBaseClient interface {
 }
 
 type BedrockKBClient struct {
-	client          *bedrockagentruntime.Client
-	knowledgeBaseId string
+	client            *bedrockagentruntime.Client
+	knowledgeBaseId   string
+	generativeModelId string
+	region            string
 }
 
-func NewBedrockKBClient(cfg aws.Config, knowledgeBaseId string) *BedrockKBClient {
+func NewBedrockKBClient(cfg aws.Config, knowledgeBaseId string, generativeModelId string, region string) *BedrockKBClient {
 	return &BedrockKBClient{
-		client:          bedrockagentruntime.NewFromConfig(cfg),
-		knowledgeBaseId: knowledgeBaseId,
+		client:            bedrockagentruntime.NewFromConfig(cfg),
+		knowledgeBaseId:   knowledgeBaseId,
+		generativeModelId: generativeModelId,
+		region:            region,
 	}
 }
 
 func (c *BedrockKBClient) QueryKnowledgeBase(ctx context.Context, question string) (string, error) {
-	input := &bedrockagentruntime.RetrieveInput{
-		KnowledgeBaseId: aws.String(c.knowledgeBaseId),
-		RetrievalQuery: &types.KnowledgeBaseQuery{
+	// Build model ARN
+	modelArn := fmt.Sprintf("arn:aws:bedrock:%s::foundation-model/%s", c.region, c.generativeModelId)
+
+	// Use RetrieveAndGenerate to get AI-generated answer based on retrieved documents
+	input := &bedrockagentruntime.RetrieveAndGenerateInput{
+		Input: &types.RetrieveAndGenerateInput{
 			Text: aws.String(question),
+		},
+		RetrieveAndGenerateConfiguration: &types.RetrieveAndGenerateConfiguration{
+			Type: types.RetrieveAndGenerateTypeKnowledgeBase,
+			KnowledgeBaseConfiguration: &types.KnowledgeBaseRetrieveAndGenerateConfiguration{
+				KnowledgeBaseId: aws.String(c.knowledgeBaseId),
+				ModelArn:        aws.String(modelArn),
+			},
 		},
 	}
 
-	output, err := c.client.Retrieve(ctx, input)
+	output, err := c.client.RetrieveAndGenerate(ctx, input)
 	if err != nil {
 		return "", c.handleAWSError(err)
 	}
 
-	if output.RetrievalResults == nil || len(output.RetrievalResults) == 0 {
-		return "", nil
+	// Extract generated answer
+	if output.Output != nil && output.Output.Text != nil {
+		return *output.Output.Text, nil
 	}
 
-	// Find the result with the highest confidence score
-	bestResult := output.RetrievalResults[0]
-	highestScore := getScore(bestResult)
-
-	for _, result := range output.RetrievalResults[1:] {
-		score := getScore(result)
-		if score > highestScore {
-			highestScore = score
-			bestResult = result
-		}
-	}
-
-	// Extract answer text from the best result
-	if bestResult.Content != nil && bestResult.Content.Text != nil {
-		return *bestResult.Content.Text, nil
-	}
-
-	return "", nil
+	return "ไม่พบคำตอบที่เกี่ยวข้องกับคำถามของคุณ", nil
 }
 
-func getScore(result types.KnowledgeBaseRetrievalResult) float64 {
-	if result.Score != nil {
-		return float64(*result.Score)
-	}
-	return 0.0
-}
+
 
 func (c *BedrockKBClient) handleAWSError(err error) error {
 	errMsg := err.Error()
