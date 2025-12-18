@@ -1,34 +1,40 @@
 package config
 
 import (
+	_ "embed"
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 )
 
+//go:embed system_instructions.txt
+var systemInstructions string
+
 type Config struct {
-	AWSRegion         string
-	EmbeddingModelId  string
-	KnowledgeBaseId   string
-	GenerativeModelId string
-	MaxQuestionLength int
-	RetryAttempts     int
+	AWSRegion          string
+	EmbeddingModelId   string
+	KnowledgeBaseId    string
+	GenerativeModelId  string
+	SystemInstructions string
+	MaxQuestionLength  int
+	RetryAttempts      int
 }
 
 func LoadConfig() (*Config, error) {
-	// Try BEDROCK_REGION first (for Lambda), then fall back to AWS_REGION (for local)
 	region := getEnv("BEDROCK_REGION", "")
 	if region == "" {
 		region = getEnv("AWS_REGION", "us-east-1")
 	}
 
 	config := &Config{
-		AWSRegion:         region,
-		EmbeddingModelId:  "anthropic.claude-sonnet-4-5-20250929-v1:0",
-		KnowledgeBaseId:   getEnv("BEDROCK_KB_ID", "R1DHVCY9K7"),
-		GenerativeModelId: getEnv("BEDROCK_GENERATIVE_MODEL", "anthropic.claude-3-5-sonnet-20240620-v1:0"),
-		MaxQuestionLength: getEnvAsInt("MAX_QUESTION_LENGTH", 1000),
-		RetryAttempts:     getEnvAsInt("RETRY_ATTEMPTS", 3),
+		AWSRegion:          region,
+		EmbeddingModelId:   getEnv("BEDROCK_EMBEDDING_MODEL", "amazon.titan-embed-text-v2:0"),
+		KnowledgeBaseId:    getEnv("BEDROCK_KB_ID", "R1DHVCY9K7"),
+		GenerativeModelId:  getEnv("BEDROCK_GENERATIVE_MODEL", "amazon.nova-pro-v1:0"),
+		SystemInstructions: strings.TrimSpace(systemInstructions),
+		MaxQuestionLength:  getEnvAsInt("MAX_QUESTION_LENGTH", 1000),
+		RetryAttempts:      getEnvAsInt("RETRY_ATTEMPTS", 3),
 	}
 
 	if err := config.Validate(); err != nil {

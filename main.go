@@ -70,7 +70,7 @@ func main() {
 
 	// Create AWS clients
 	embeddingClient := aws.NewBedrockEmbeddingClient(awsCfg, cfg.EmbeddingModelId)
-	kbClient := aws.NewBedrockKBClient(awsCfg, cfg.KnowledgeBaseId, cfg.GenerativeModelId, cfg.AWSRegion)
+	kbClient := aws.NewBedrockKBClient(awsCfg, cfg.KnowledgeBaseId, cfg.GenerativeModelId, cfg.AWSRegion, cfg.SystemInstructions)
 	log.Println("AWS Bedrock clients initialized")
 
 	// Create service

@@ -16,34 +16,47 @@ type KnowledgeBaseClient interface {
 }
 
 type BedrockKBClient struct {
-	client            *bedrockagentruntime.Client
-	knowledgeBaseId   string
-	generativeModelId string
-	region            string
+	client             *bedrockagentruntime.Client
+	knowledgeBaseId    string
+	generativeModelId  string
+	region             string
+	systemInstructions string
 }
 
-func NewBedrockKBClient(cfg aws.Config, knowledgeBaseId string, generativeModelId string, region string) *BedrockKBClient {
+func NewBedrockKBClient(cfg aws.Config, knowledgeBaseId string, generativeModelId string, region string, systemInstructions string) *BedrockKBClient {
 	return &BedrockKBClient{
-		client:            bedrockagentruntime.NewFromConfig(cfg),
-		knowledgeBaseId:   knowledgeBaseId,
-		generativeModelId: generativeModelId,
-		region:            region,
+		client:             bedrockagentruntime.NewFromConfig(cfg),
+		knowledgeBaseId:    knowledgeBaseId,
+		generativeModelId:  generativeModelId,
+		region:             region,
+		systemInstructions: systemInstructions,
 	}
 }
 
 func (c *BedrockKBClient) QueryKnowledgeBase(ctx context.Context, question string, enableRelateDocument bool) (string, []string, error) {
 	modelArn := fmt.Sprintf("arn:aws:bedrock:%s::foundation-model/%s", c.region, c.generativeModelId)
 
+	kbConfig := &types.KnowledgeBaseRetrieveAndGenerateConfiguration{
+		KnowledgeBaseId: aws.String(c.knowledgeBaseId),
+		ModelArn:        aws.String(modelArn),
+	}
+
+	// Add system instructions if provided
+	if c.systemInstructions != "" {
+		kbConfig.GenerationConfiguration = &types.GenerationConfiguration{
+			PromptTemplate: &types.PromptTemplate{
+				TextPromptTemplate: aws.String(c.systemInstructions + "\n\nQuestion: $query$\n\nContext: $search_results$"),
+			},
+		}
+	}
+
 	input := &bedrockagentruntime.RetrieveAndGenerateInput{
 		Input: &types.RetrieveAndGenerateInput{
 			Text: aws.String(question),
 		},
 		RetrieveAndGenerateConfiguration: &types.RetrieveAndGenerateConfiguration{
-			Type: types.RetrieveAndGenerateTypeKnowledgeBase,
-			KnowledgeBaseConfiguration: &types.KnowledgeBaseRetrieveAndGenerateConfiguration{
-				KnowledgeBaseId: aws.String(c.knowledgeBaseId),
-				ModelArn:        aws.String(modelArn),
-			},
+			Type:                       types.RetrieveAndGenerateTypeKnowledgeBase,
+			KnowledgeBaseConfiguration: kbConfig,
 		},
 	}
 
