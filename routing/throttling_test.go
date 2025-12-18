@@ -2,6 +2,7 @@ package routing
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"net/http/httptest"
 	"testing"
@@ -11,6 +12,18 @@ import (
 	"github.com/leanovate/gopter/gen"
 	"github.com/leanovate/gopter/prop"
 )
+
+// MockQuestionSearchService for throttling tests
+type MockQuestionSearchService struct {
+	err error
+}
+
+func (m *MockQuestionSearchService) SearchAnswer(ctx context.Context, question string, enableRelateDocument bool) (string, []string, error) {
+	if m.err != nil {
+		return "", nil, m.err
+	}
+	return "mock answer", []string{}, nil
+}
 
 // Feature: bedrock-question-search, Property 14: Throttling events are logged
 // Validates: Requirements 8.3

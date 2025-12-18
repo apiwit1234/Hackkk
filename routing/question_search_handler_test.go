@@ -16,16 +16,17 @@ import (
 
 // Mock service for testing
 type mockQuestionSearchService struct {
-	searchAnswerFunc func(ctx context.Context, question string) (string, error)
+	searchAnswerFunc func(ctx context.Context, question string, enableRelateDocument bool) (string, error)
 	callCount        int
 }
 
-func (m *mockQuestionSearchService) SearchAnswer(ctx context.Context, question string) (string, error) {
+func (m *mockQuestionSearchService) SearchAnswer(ctx context.Context, question string, enableRelateDocument bool) (string, []string, error) {
 	m.callCount++
 	if m.searchAnswerFunc != nil {
-		return m.searchAnswerFunc(ctx, question)
+		answer, err := m.searchAnswerFunc(ctx, question, enableRelateDocument)
+		return answer, []string{}, err
 	}
-	return "mock answer", nil
+	return "mock answer", []string{}, nil
 }
 
 // Feature: bedrock-question-search, Property 1: Valid JSON requests are parsed successfully
@@ -36,7 +37,7 @@ func TestValidJSONParsing_Property(t *testing.T) {
 	properties.Property("valid JSON with question field is parsed", prop.ForAll(
 		func(question string) bool {
 			mockService := &mockQuestionSearchService{
-				searchAnswerFunc: func(ctx context.Context, q string) (string, error) {
+				searchAnswerFunc: func(ctx context.Context, q string, enableRelateDocument bool) (string, error) {
 					return "answer for " + q, nil
 				},
 			}
@@ -166,7 +167,7 @@ func TestJSONResponseValidity_Property(t *testing.T) {
 	properties.Property("successful responses have valid JSON with answer field", prop.ForAll(
 		func(answer string) bool {
 			mockService := &mockQuestionSearchService{
-				searchAnswerFunc: func(ctx context.Context, q string) (string, error) {
+				searchAnswerFunc: func(ctx context.Context, q string, enableRelateDocument bool) (string, error) {
 					return answer, nil
 				},
 			}
@@ -205,7 +206,7 @@ func TestJSONResponseValidity_Property(t *testing.T) {
 // Unit tests for handler
 func TestHandler_ValidRequest(t *testing.T) {
 	mockService := &mockQuestionSearchService{
-		searchAnswerFunc: func(ctx context.Context, q string) (string, error) {
+		searchAnswerFunc: func(ctx context.Context, q string, enableRelateDocument bool) (string, error) {
 			return "This is the answer", nil
 		},
 	}
@@ -341,7 +342,7 @@ func TestHandler_MalformedJSON(t *testing.T) {
 
 func TestHandler_EmptyAnswer(t *testing.T) {
 	mockService := &mockQuestionSearchService{
-		searchAnswerFunc: func(ctx context.Context, q string) (string, error) {
+		searchAnswerFunc: func(ctx context.Context, q string, enableRelateDocument bool) (string, error) {
 			return "", nil
 		},
 	}
@@ -377,7 +378,7 @@ func TestThrottlingLogging_Property(t *testing.T) {
 	properties.Property("throttling errors return 429 status", prop.ForAll(
 		func(errorMsg string) bool {
 			mockService := &mockQuestionSearchService{
-				searchAnswerFunc: func(ctx context.Context, q string) (string, error) {
+				searchAnswerFunc: func(ctx context.Context, q string, enableRelateDocument bool) (string, error) {
 					return "", &BedrockError{
 						Code:    "THROTTLING_ERROR",
 						Message: errorMsg,
@@ -422,7 +423,7 @@ func (e *BedrockError) Error() string {
 // Unit tests for throttling and quota handling
 func TestHandler_ThrottlingError(t *testing.T) {
 	mockService := &mockQuestionSearchService{
-		searchAnswerFunc: func(ctx context.Context, q string) (string, error) {
+		searchAnswerFunc: func(ctx context.Context, q string, enableRelateDocument bool) (string, error) {
 			return "", &BedrockError{
 				Code:    "THROTTLING_ERROR",
 				Message: "throttled",
@@ -452,7 +453,7 @@ func TestHandler_ThrottlingError(t *testing.T) {
 
 func TestHandler_QuotaError(t *testing.T) {
 	mockService := &mockQuestionSearchService{
-		searchAnswerFunc: func(ctx context.Context, q string) (string, error) {
+		searchAnswerFunc: func(ctx context.Context, q string, enableRelateDocument bool) (string, error) {
 			return "", &BedrockError{
 				Code:    "AWS_SERVICE_ERROR",
 				Message: "AWS quota exceeded",

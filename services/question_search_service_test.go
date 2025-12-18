@@ -25,16 +25,17 @@ func (m *mockEmbeddingClient) GenerateEmbedding(ctx context.Context, text string
 }
 
 type mockKnowledgeBaseClient struct {
-	queryKnowledgeBaseFunc func(ctx context.Context, question string) (string, error)
+	queryKnowledgeBaseFunc func(ctx context.Context, question string, enableRelateDocument bool) (string, error)
 	callCount              int
 }
 
-func (m *mockKnowledgeBaseClient) QueryKnowledgeBase(ctx context.Context, question string) (string, error) {
+func (m *mockKnowledgeBaseClient) QueryKnowledgeBase(ctx context.Context, question string, enableRelateDocument bool) (string, []string, error) {
 	m.callCount++
 	if m.queryKnowledgeBaseFunc != nil {
-		return m.queryKnowledgeBaseFunc(ctx, question)
+		answer, err := m.queryKnowledgeBaseFunc(ctx, question, enableRelateDocument)
+		return answer, []string{}, err
 	}
-	return "mock answer", nil
+	return "mock answer", []string{}, nil
 }
 
 // Feature: bedrock-question-search, Property 5: Embedding vectors are sent to knowledge base
@@ -45,7 +46,7 @@ func TestEmbeddingToKBWorkflow_Property(t *testing.T) {
 	properties.Property("KB is queried for all valid questions", prop.ForAll(
 		func(question string) bool {
 			mockKB := &mockKnowledgeBaseClient{
-				queryKnowledgeBaseFunc: func(ctx context.Context, q string) (string, error) {
+				queryKnowledgeBaseFunc: func(ctx context.Context, q string, enableRelateDocument bool) (string, error) {
 					return "answer for " + q, nil
 				},
 			}
@@ -56,7 +57,7 @@ func TestEmbeddingToKBWorkflow_Property(t *testing.T) {
 
 			service := NewBedrockQuestionSearchService(nil, mockKB, cfg)
 
-			_, err := service.SearchAnswer(context.Background(), question)
+			_, _, err := service.SearchAnswer(context.Background(), question, false)
 
 			// KB should be called exactly once for successful queries
 			return err == nil && mockKB.callCount == 1
@@ -75,7 +76,7 @@ func TestAuditLogging_Property(t *testing.T) {
 	properties.Property("all requests are processed", prop.ForAll(
 		func(question string) bool {
 			mockKB := &mockKnowledgeBaseClient{
-				queryKnowledgeBaseFunc: func(ctx context.Context, q string) (string, error) {
+				queryKnowledgeBaseFunc: func(ctx context.Context, q string, enableRelateDocument bool) (string, error) {
 					return "answer", nil
 				},
 			}
@@ -86,7 +87,7 @@ func TestAuditLogging_Property(t *testing.T) {
 
 			service := NewBedrockQuestionSearchService(nil, mockKB, cfg)
 
-			_, err := service.SearchAnswer(context.Background(), question)
+			_, _, err := service.SearchAnswer(context.Background(), question, false)
 
 			// Service should process the request (logging happens internally)
 			return err == nil
@@ -105,7 +106,7 @@ func TestErrorLogging_Property(t *testing.T) {
 	properties.Property("errors are handled and logged", prop.ForAll(
 		func(errorMsg string) bool {
 			mockKB := &mockKnowledgeBaseClient{
-				queryKnowledgeBaseFunc: func(ctx context.Context, q string) (string, error) {
+				queryKnowledgeBaseFunc: func(ctx context.Context, q string, enableRelateDocument bool) (string, error) {
 					return "", &testError{msg: errorMsg}
 				},
 			}
@@ -116,7 +117,7 @@ func TestErrorLogging_Property(t *testing.T) {
 
 			service := NewBedrockQuestionSearchService(nil, mockKB, cfg)
 
-			_, err := service.SearchAnswer(context.Background(), "test question")
+			_, _, err := service.SearchAnswer(context.Background(), "test question", false)
 
 			// Error should be returned (logging happens internally)
 			return err != nil
@@ -138,7 +139,7 @@ func (e *testError) Error() string {
 // Unit tests for service orchestration
 func TestService_SuccessfulFlow(t *testing.T) {
 	mockKB := &mockKnowledgeBaseClient{
-		queryKnowledgeBaseFunc: func(ctx context.Context, q string) (string, error) {
+		queryKnowledgeBaseFunc: func(ctx context.Context, q string, enableRelateDocument bool) (string, error) {
 			return "This is the answer", nil
 		},
 	}
@@ -149,7 +150,7 @@ func TestService_SuccessfulFlow(t *testing.T) {
 
 	service := NewBedrockQuestionSearchService(nil, mockKB, cfg)
 
-	answer, err := service.SearchAnswer(context.Background(), "What is the question?")
+	answer, _, err := service.SearchAnswer(context.Background(), "What is the question?", false)
 
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
@@ -164,7 +165,7 @@ func TestService_SuccessfulFlow(t *testing.T) {
 
 func TestService_KBError(t *testing.T) {
 	mockKB := &mockKnowledgeBaseClient{
-		queryKnowledgeBaseFunc: func(ctx context.Context, q string) (string, error) {
+		queryKnowledgeBaseFunc: func(ctx context.Context, q string, enableRelateDocument bool) (string, error) {
 			return "", &testError{msg: "KB error"}
 		},
 	}
@@ -175,7 +176,7 @@ func TestService_KBError(t *testing.T) {
 
 	service := NewBedrockQuestionSearchService(nil, mockKB, cfg)
 
-	_, err := service.SearchAnswer(context.Background(), "test question")
+	_, _, err := service.SearchAnswer(context.Background(), "test question", false)
 
 	if err == nil {
 		t.Fatal("expected error from KB, got nil")
@@ -184,7 +185,7 @@ func TestService_KBError(t *testing.T) {
 
 func TestService_EmptyAnswer(t *testing.T) {
 	mockKB := &mockKnowledgeBaseClient{
-		queryKnowledgeBaseFunc: func(ctx context.Context, q string) (string, error) {
+		queryKnowledgeBaseFunc: func(ctx context.Context, q string, enableRelateDocument bool) (string, error) {
 			return "", nil
 		},
 	}
@@ -195,7 +196,7 @@ func TestService_EmptyAnswer(t *testing.T) {
 
 	service := NewBedrockQuestionSearchService(nil, mockKB, cfg)
 
-	answer, err := service.SearchAnswer(context.Background(), "test question")
+	answer, _, err := service.SearchAnswer(context.Background(), "test question", false)
 
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
