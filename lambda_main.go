@@ -1,3 +1,4 @@
+//go:build lambda
 // +build lambda
 
 // Lambda entry point for AWS deployment
@@ -13,8 +14,8 @@ import (
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
-	"github.com/awslabs/aws-lambda-go-api-proxy/httpadapter"
 	awsConfig "github.com/aws/aws-sdk-go-v2/config"
+	"github.com/awslabs/aws-lambda-go-api-proxy/httpadapter"
 
 	"teletubpax-api/aws"
 	"teletubpax-api/config"
@@ -43,12 +44,12 @@ func init() {
 	// Initialize Standard Logger for Lambda (CloudWatch handles logs automatically)
 	logger.Initialize(&logger.StandardLogger{})
 	logger.SetLogLevel(logger.ERROR) // Only log errors in Lambda
-	
+
 	log.Printf("Lambda initialization started for function: %s", os.Getenv("AWS_LAMBDA_FUNCTION_NAME"))
 
 	// Create AWS clients
 	embeddingClient := aws.NewBedrockEmbeddingClient(awsCfg, cfg.EmbeddingModelId)
-	kbClient := aws.NewBedrockKBClient(awsCfg, cfg.KnowledgeBaseId, cfg.GenerativeModelId, cfg.AWSRegion)
+	kbClient := aws.NewBedrockKBClient(awsCfg, cfg.KnowledgeBaseId, cfg.GenerativeModelId, cfg.AWSRegion, cfg.SystemInstructions)
 
 	// Create service
 	questionSearchService := services.NewBedrockQuestionSearchService(
@@ -62,12 +63,27 @@ func init() {
 
 	// Create Lambda adapter for API Gateway V2 (HTTP API)
 	httpLambda = httpadapter.NewV2(router)
-	
+
 	log.Println("Lambda initialization completed successfully")
 }
 
 func Handler(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
-	return httpLambda.ProxyWithContext(ctx, req)
+	// Get response from HTTP adapter
+	resp, err := httpLambda.ProxyWithContext(ctx, req)
+
+	// Ensure CORS headers are always present in Lambda response
+	if resp.Headers == nil {
+		resp.Headers = make(map[string]string)
+	}
+
+	// Add CORS headers to response (these will be merged with any existing headers)
+	resp.Headers["Access-Control-Allow-Origin"] = "*"
+	resp.Headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+	resp.Headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
+	resp.Headers["Access-Control-Max-Age"] = "3600"
+	resp.Headers["Content-Type"] = "application/json"
+
+	return resp, err
 }
 
 func main() {
