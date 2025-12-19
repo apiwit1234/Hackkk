@@ -17,7 +17,6 @@ import (
 type KnowledgeBaseClient interface {
 	QueryKnowledgeBase(ctx context.Context, question string, enableRelateDocument bool) (string, []string, error)
 	QueryMultipleKnowledgeBases(ctx context.Context, question string, enableRelateDocument bool) (string, []string, error)
-	RetrieveRelatedDocuments(ctx context.Context, query string) ([]string, error)
 }
 
 type BedrockKBClient struct {
@@ -41,6 +40,7 @@ func NewBedrockKBClient(cfg aws.Config, knowledgeBaseIds []string, generativeMod
 }
 
 func (c *BedrockKBClient) QueryKnowledgeBase(ctx context.Context, question string, enableRelateDocument bool) (string, []string, error) {
+	// Use the first knowledge base for backward compatibility
 	if len(c.knowledgeBaseIds) == 0 {
 		return "", nil, fmt.Errorf("no knowledge base IDs configured")
 	}
@@ -48,12 +48,16 @@ func (c *BedrockKBClient) QueryKnowledgeBase(ctx context.Context, question strin
 }
 
 func (c *BedrockKBClient) queryKnowledgeBaseById(ctx context.Context, knowledgeBaseId string, question string, enableRelateDocument bool) (string, []string, error) {
+	// Build the correct model identifier based on model type
 	var modelArn string
 	if strings.HasPrefix(c.generativeModelId, "arn:") {
+		// Already an ARN, use as-is
 		modelArn = c.generativeModelId
 	} else if strings.Contains(c.generativeModelId, "anthropic.claude") && strings.Contains(c.generativeModelId, "haiku") {
+		// For Claude Haiku models, use cross-region inference profile ID (not ARN)
 		modelArn = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
 	} else {
+		// Standard foundation model ARN
 		modelArn = fmt.Sprintf("arn:aws:bedrock:%s::foundation-model/%s", c.region, c.generativeModelId)
 	}
 
@@ -62,6 +66,7 @@ func (c *BedrockKBClient) queryKnowledgeBaseById(ctx context.Context, knowledgeB
 		ModelArn:        aws.String(modelArn),
 	}
 
+	// Add system instructions if provided
 	if c.systemInstructions != "" {
 		kbConfig.GenerationConfiguration = &types.GenerationConfiguration{
 			PromptTemplate: &types.PromptTemplate{
@@ -124,6 +129,7 @@ func (c *BedrockKBClient) QueryMultipleKnowledgeBases(ctx context.Context, quest
 	results := make(chan kbResult, len(c.knowledgeBaseIds))
 	var wg sync.WaitGroup
 
+	// Query all knowledge bases in parallel
 	for _, kbId := range c.knowledgeBaseIds {
 		wg.Add(1)
 		go func(knowledgeBaseId string) {
@@ -138,9 +144,11 @@ func (c *BedrockKBClient) QueryMultipleKnowledgeBases(ctx context.Context, quest
 		}(kbId)
 	}
 
+	// Wait for all queries to complete
 	wg.Wait()
 	close(results)
 
+	// Collect and combine results
 	var combinedAnswer strings.Builder
 	var allDocuments []string
 	documentSet := make(map[string]bool)
@@ -155,6 +163,7 @@ func (c *BedrockKBClient) QueryMultipleKnowledgeBases(ctx context.Context, quest
 
 		successCount++
 
+		// Combine answers from different KBs
 		if result.answer != "" && result.answer != "ไม่พบคำตอบที่เกี่ยวข้องกับคำถามของคุณ" {
 			if combinedAnswer.Len() > 0 {
 				combinedAnswer.WriteString("\n\n")
@@ -162,6 +171,7 @@ func (c *BedrockKBClient) QueryMultipleKnowledgeBases(ctx context.Context, quest
 			combinedAnswer.WriteString(result.answer)
 		}
 
+		// Deduplicate documents
 		for _, doc := range result.documents {
 			if !documentSet[doc] {
 				documentSet[doc] = true
@@ -170,6 +180,7 @@ func (c *BedrockKBClient) QueryMultipleKnowledgeBases(ctx context.Context, quest
 		}
 	}
 
+	// If all queries failed, return the last error
 	if successCount == 0 {
 		if lastError != nil {
 			return "", nil, lastError
@@ -177,21 +188,32 @@ func (c *BedrockKBClient) QueryMultipleKnowledgeBases(ctx context.Context, quest
 		return "", nil, fmt.Errorf("all knowledge base queries failed")
 	}
 
+	// Return combined results
 	finalAnswer := combinedAnswer.String()
 	if finalAnswer == "" {
 		finalAnswer = "ไม่พบคำตอบที่เกี่ยวข้องกับคำถามของคุณ"
 		return finalAnswer, allDocuments, nil
 	}
 
+	// Synthesize multiple answers into one coherent response
+	fmt.Printf("DEBUG: Starting synthesis for question: %s\n", question)
+	fmt.Printf("DEBUG: Combined answers length: %d characters\n", len(finalAnswer))
+
 	synthesizedAnswer, err := c.synthesizeAnswers(ctx, question, finalAnswer)
 	if err != nil {
+		// If synthesis fails, log the error and return the combined answer as fallback
+		fmt.Printf("ERROR: Synthesis failed: %v. Returning combined answers.\n", err)
 		return finalAnswer, allDocuments, nil
 	}
 
+	fmt.Printf("DEBUG: Synthesis successful. Result length: %d characters\n", len(synthesizedAnswer))
 	return synthesizedAnswer, allDocuments, nil
 }
 
 func (c *BedrockKBClient) synthesizeAnswers(ctx context.Context, question string, combinedAnswers string) (string, error) {
+	fmt.Printf("DEBUG: synthesizeAnswers called with modelId: %s\n", c.generativeModelId)
+
+	// Create synthesis prompt
 	userMessage := fmt.Sprintf(`You have received multiple answers from different knowledge bases for the same question. Synthesize them into ONE clear, coherent answer.
 
 Original Question: %s
@@ -215,11 +237,18 @@ Instructions:
     	**Example:** "ดอกเบี้ย 5% ต่อปี สำหรับลูกค้าใหม่"
 	8.2 Provide ONLY the final synthesized answer:`, question, combinedAnswers)
 
+	fmt.Printf("DEBUG: Calling Bedrock Converse API...\n")
+
+	// Get the correct model identifier (inference profile for Claude Haiku)
 	modelId := c.generativeModelId
 	if strings.Contains(c.generativeModelId, "anthropic.claude") && strings.Contains(c.generativeModelId, "haiku") {
+		// Use cross-region inference profile ID for Claude Haiku
 		modelId = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
 	}
 
+	fmt.Printf("DEBUG: Using model ID: %s\n", modelId)
+
+	// Use Bedrock Runtime Converse API for direct model invocation
 	converseInput := &bedrockruntime.ConverseInput{
 		ModelId: aws.String(modelId),
 		Messages: []rttypes.Message{
@@ -234,25 +263,31 @@ Instructions:
 		},
 		InferenceConfig: &rttypes.InferenceConfiguration{
 			MaxTokens:   aws.Int32(2048),
-			Temperature: aws.Float32(0.3),
+			Temperature: aws.Float32(0.3), // Lower temperature for more focused synthesis
 		},
 	}
 
 	output, err := c.runtimeClient.Converse(ctx, converseInput)
 	if err != nil {
+		fmt.Printf("ERROR: Converse API call failed: %v\n", err)
 		return "", fmt.Errorf("synthesis converse API failed: %w", err)
 	}
 
+	fmt.Printf("DEBUG: Converse API call successful, extracting response...\n")
+
+	// Extract the response text
 	if output.Output != nil {
 		if msg, ok := output.Output.(*rttypes.ConverseOutputMemberMessage); ok {
 			if len(msg.Value.Content) > 0 {
 				if textBlock, ok := msg.Value.Content[0].(*rttypes.ContentBlockMemberText); ok {
+					fmt.Printf("DEBUG: Successfully extracted synthesized text\n")
 					return textBlock.Value, nil
 				}
 			}
 		}
 	}
 
+	fmt.Printf("ERROR: Failed to extract text from Converse response\n")
 	return "", fmt.Errorf("no synthesis output received")
 }
 
@@ -274,45 +309,6 @@ func (c *BedrockKBClient) convertS3UriToPublicUrl(s3Uri string) string {
 	bucket := parts[0]
 	key := parts[1]
 	return fmt.Sprintf("https://%s.s3.%s.amazonaws.com/%s", bucket, c.region, key)
-}
-
-func (c *BedrockKBClient) RetrieveRelatedDocuments(ctx context.Context, query string) ([]string, error) {
-	if len(c.knowledgeBaseIds) == 0 {
-		return nil, fmt.Errorf("no knowledge base IDs configured")
-	}
-
-	input := &bedrockagentruntime.RetrieveInput{
-		KnowledgeBaseId: aws.String(c.knowledgeBaseIds[0]),
-		RetrievalQuery: &types.KnowledgeBaseQuery{
-			Text: aws.String(query),
-		},
-	}
-
-	output, err := c.client.Retrieve(ctx, input)
-	if err != nil {
-		return nil, c.handleAWSError(err)
-	}
-
-	var relatedDocuments []string
-	documentSet := make(map[string]bool)
-
-	if output.RetrievalResults != nil {
-		for _, result := range output.RetrievalResults {
-			if result.Location != nil && result.Location.S3Location != nil {
-				if result.Location.S3Location.Uri != nil {
-					s3Uri := *result.Location.S3Location.Uri
-					publicUrl := c.convertS3UriToPublicUrl(s3Uri)
-					
-					if !documentSet[publicUrl] {
-						documentSet[publicUrl] = true
-						relatedDocuments = append(relatedDocuments, publicUrl)
-					}
-				}
-			}
-		}
-	}
-
-	return relatedDocuments, nil
 }
 
 func (c *BedrockKBClient) handleAWSError(err error) error {

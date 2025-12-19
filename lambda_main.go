@@ -64,13 +64,8 @@ func init() {
 		cfg,
 	)
 
-	documentSearchService := services.NewBedrockDocumentSearchService(
-		kbClient,
-		cfg,
-	)
-
 	// Setup routes
-	router := routing.SetupRoutes(questionSearchService, documentDetailsService, documentSearchService, cfg.MaxQuestionLength)
+	router := routing.SetupRoutes(questionSearchService, documentDetailsService, cfg.MaxQuestionLength)
 
 	// Create Lambda adapter for API Gateway V2 (HTTP API)
 	httpLambda = httpadapter.NewV2(router)
