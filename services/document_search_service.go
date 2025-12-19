@@ -46,9 +46,9 @@ func (s *BedrockDocumentSearchService) SearchDocumentsByKeyword(ctx context.Cont
 	}
 
 	err := utils.RetryWithBackoff(ctx, retryConfig, func() error {
-		_, docs, err := s.knowledgeBaseClient.QueryKnowledgeBase(ctx, keyword, true)
+		docs, err := s.knowledgeBaseClient.RetrieveRelatedDocuments(ctx, keyword)
 		if err != nil {
-			log.Error("Knowledge base query failed", map[string]interface{}{
+			log.Error("Knowledge base retrieve failed", map[string]interface{}{
 				"error": err.Error(),
 			})
 			return err
