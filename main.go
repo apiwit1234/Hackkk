@@ -88,8 +88,15 @@ func main() {
 	)
 	log.Println("Document details service created")
 
+	documentSummaryService := services.NewBedrockDocumentSummaryService(
+		openSearchClient,
+		kbClient,
+		cfg,
+	)
+	log.Println("Document summary service created")
+
 	// Setup routes with services
-	router := routing.SetupRoutes(questionSearchService, documentDetailsService, cfg.MaxQuestionLength)
+	router := routing.SetupRoutes(questionSearchService, documentDetailsService, documentSummaryService, cfg.MaxQuestionLength)
 
 	log.Println("Server starting on :8080")
 	if err := http.ListenAndServe(":8080", router); err != nil {

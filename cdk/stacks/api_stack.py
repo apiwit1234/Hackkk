@@ -19,7 +19,7 @@ class BedrockApiStack(Stack):
         aws_region = self.node.try_get_context("aws_region") or "us-east-1"
         embedding_model = self.node.try_get_context("embedding_model") or "amazon.titan-embed-text-v2"
         # Multiple Knowledge Base IDs - hardcoded in Go code (config/bedrock_config.go)
-        knowledge_base_ids = ["ZHYAWGPBRS", "I2XCL5FZAQ", "CC46VWUAVL", "FUYZ1OB4WO", "R1DHVCY9K7", "O8J75DOLZN", "CRM0MV7YIW"]
+        knowledge_base_ids = ["ZHYAWGPBRS","I2XCL5FZAQ","CC46VWUAVL"]
         max_question_length = self.node.try_get_context("max_question_length") or "1000"
         retry_attempts = self.node.try_get_context("retry_attempts") or "3"
 

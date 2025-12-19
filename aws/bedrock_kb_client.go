@@ -6,6 +6,7 @@ import (
 	"strings"
 	"sync"
 	"teletubpax-api/errors"
+	"teletubpax-api/utils"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/bedrockagentruntime"
@@ -91,27 +92,104 @@ func (c *BedrockKBClient) queryKnowledgeBaseById(ctx context.Context, knowledgeB
 	}
 
 	var relatedDocuments []string
-	if enableRelateDocument && output.Citations != nil && len(output.Citations) > 0 {
-		for _, citation := range output.Citations {
-			if citation.RetrievedReferences != nil {
-				for _, ref := range citation.RetrievedReferences {
-					if ref.Location != nil && ref.Location.S3Location != nil {
-						if ref.Location.S3Location.Uri != nil {
-							s3Uri := *ref.Location.S3Location.Uri
-							publicUrl := c.convertS3UriToPublicUrl(s3Uri)
-							relatedDocuments = append(relatedDocuments, publicUrl)
+	if enableRelateDocument {
+		fmt.Printf("DEBUG: enableRelateDocument=true, extracting citations...\n")
+		fmt.Printf("DEBUG: Citations count: %d\n", len(output.Citations))
+
+		documentSet := make(map[string]bool) // Deduplicate documents
+
+		if output.Citations != nil && len(output.Citations) > 0 {
+			for i, citation := range output.Citations {
+				fmt.Printf("DEBUG: Processing citation %d\n", i)
+				if citation.RetrievedReferences != nil {
+					fmt.Printf("DEBUG: Citation %d has %d retrieved references\n", i, len(citation.RetrievedReferences))
+					for j, ref := range citation.RetrievedReferences {
+						if ref.Location != nil && ref.Location.S3Location != nil {
+							if ref.Location.S3Location.Uri != nil {
+								s3Uri := *ref.Location.S3Location.Uri
+								publicUrl := c.convertS3UriToPublicUrl(s3Uri)
+								if !documentSet[publicUrl] {
+									documentSet[publicUrl] = true
+									fmt.Printf("DEBUG: Adding document %d from citation %d: %s\n", j, i, publicUrl)
+									relatedDocuments = append(relatedDocuments, publicUrl)
+								}
+							}
 						}
+					}
+				}
+			}
+		} else {
+			fmt.Printf("DEBUG: No citations found in output\n")
+		}
+
+		// If no documents found via citations, use Retrieve API to get source documents
+		if len(relatedDocuments) == 0 {
+			fmt.Printf("DEBUG: No documents from citations, using Retrieve API...\n")
+			retrievedDocs, err := c.retrieveSourceDocuments(ctx, knowledgeBaseId, question)
+			if err != nil {
+				fmt.Printf("DEBUG: Retrieve API failed: %v\n", err)
+			} else {
+				for _, doc := range retrievedDocs {
+					if !documentSet[doc] {
+						documentSet[doc] = true
+						relatedDocuments = append(relatedDocuments, doc)
+					}
+				}
+				fmt.Printf("DEBUG: Retrieved %d documents from Retrieve API\n", len(retrievedDocs))
+			}
+		}
+
+		fmt.Printf("DEBUG: Total related documents collected: %d\n", len(relatedDocuments))
+	} else {
+		fmt.Printf("DEBUG: enableRelateDocument=false, skipping document extraction\n")
+	}
+
+	if output.Output != nil && output.Output.Text != nil {
+		cleanedAnswer := utils.CleanMarkdown(*output.Output.Text)
+		return cleanedAnswer, relatedDocuments, nil
+	}
+
+	return "ไม่พบคำตอบที่เกี่ยวข้องกับคำถามของคุณ", relatedDocuments, nil
+}
+
+// retrieveSourceDocuments uses the Retrieve API to get source documents for a question
+func (c *BedrockKBClient) retrieveSourceDocuments(ctx context.Context, knowledgeBaseId string, question string) ([]string, error) {
+	input := &bedrockagentruntime.RetrieveInput{
+		KnowledgeBaseId: aws.String(knowledgeBaseId),
+		RetrievalQuery: &types.KnowledgeBaseQuery{
+			Text: aws.String(question),
+		},
+		RetrievalConfiguration: &types.KnowledgeBaseRetrievalConfiguration{
+			VectorSearchConfiguration: &types.KnowledgeBaseVectorSearchConfiguration{
+				NumberOfResults: aws.Int32(5), // Get top 5 relevant documents
+			},
+		},
+	}
+
+	output, err := c.client.Retrieve(ctx, input)
+	if err != nil {
+		return nil, err
+	}
+
+	var documents []string
+	documentSet := make(map[string]bool)
+
+	if output.RetrievalResults != nil {
+		for _, result := range output.RetrievalResults {
+			if result.Location != nil && result.Location.S3Location != nil {
+				if result.Location.S3Location.Uri != nil {
+					s3Uri := *result.Location.S3Location.Uri
+					publicUrl := c.convertS3UriToPublicUrl(s3Uri)
+					if !documentSet[publicUrl] {
+						documentSet[publicUrl] = true
+						documents = append(documents, publicUrl)
 					}
 				}
 			}
 		}
 	}
 
-	if output.Output != nil && output.Output.Text != nil {
-		return *output.Output.Text, relatedDocuments, nil
-	}
-
-	return "ไม่พบคำตอบที่เกี่ยวข้องกับคำถามของคุณ", relatedDocuments, nil
+	return documents, nil
 }
 
 func (c *BedrockKBClient) QueryMultipleKnowledgeBases(ctx context.Context, question string, enableRelateDocument bool) (string, []string, error) {
@@ -199,7 +277,7 @@ func (c *BedrockKBClient) QueryMultipleKnowledgeBases(ctx context.Context, quest
 	fmt.Printf("DEBUG: Starting synthesis for question: %s\n", question)
 	fmt.Printf("DEBUG: Combined answers length: %d characters\n", len(finalAnswer))
 
-	synthesizedAnswer, err := c.synthesizeAnswers(ctx, question, finalAnswer)
+	synthesizedAnswer, err := c.synthesizeAnswers(ctx, question, finalAnswer, allDocuments)
 	if err != nil {
 		// If synthesis fails, log the error and return the combined answer as fallback
 		fmt.Printf("ERROR: Synthesis failed: %v. Returning combined answers.\n", err)
@@ -210,8 +288,17 @@ func (c *BedrockKBClient) QueryMultipleKnowledgeBases(ctx context.Context, quest
 	return synthesizedAnswer, allDocuments, nil
 }
 
-func (c *BedrockKBClient) synthesizeAnswers(ctx context.Context, question string, combinedAnswers string) (string, error) {
+func (c *BedrockKBClient) synthesizeAnswers(ctx context.Context, question string, combinedAnswers string, relatedDocuments []string) (string, error) {
 	fmt.Printf("DEBUG: synthesizeAnswers called with modelId: %s\n", c.generativeModelId)
+
+	// Build document metadata context
+	var documentContext strings.Builder
+	if len(relatedDocuments) > 0 {
+		documentContext.WriteString("\n\nReference Documents (for version/date analysis):\n")
+		for i, docUrl := range relatedDocuments {
+			documentContext.WriteString(fmt.Sprintf("%d. %s\n", i+1, docUrl))
+		}
+	}
 
 	// Create synthesis prompt
 	userMessage := fmt.Sprintf(`You have received multiple answers from different knowledge bases for the same question. Synthesize them into ONE clear, coherent answer.
@@ -220,13 +307,30 @@ Original Question: %s
 
 Multiple Answers:
 %s
+%s
+#### CRITICAL: Recency Resolution Protocol
+You must identify and use **only the single most recent document**. Ignore older versions.
+
+**Step 1: Primary Signal (S3 Path Date)**
+  Look at the document URLs (e.g., .../YYYY/MM/...). Extract YYYY and MM.
+  The document with the highest (YYYY, MM) is the newest.
+  Example: 2025/12 > 2025/11 > 2024/12.
+
+**Step 2: Tie-Breaker (Version Number in Filename)**
+If S3 path dates are identical, check the filename:
+  **Version Tokens:** Look for patterns like v4, v4.0, ver4, version-4. Highest number wins.
+  **Numeric Suffix:** Look for patterns like -1.pdf, -2.pdf, _3.pdf. Highest number wins.
+  **Rule:** An explicit version token (e.g., v4.0) **always overrides** a simple suffix (e.g., -2).
+
+**Step 3: If Still Tied**
+  Use the answer that appears to have more complete or detailed information.
 
 Instructions:
 1. Remove "Sorry, I am unable to assist" messages unless ALL answers contain them
-2. Prefer information from the most recent documents (higher version numbers, later dates)
+2. ALWAYS prefer information from the most recent documents (use the protocol above)
 3. Remove duplicate information
 4. Combine complementary details into a single coherent response
-5. If answers contradict, choose the most recent/authoritative one
+5. If answers contradict, choose the most recent/authoritative one based on document date/version
 6. Maintain the same language as the original question
 7. Be concise and direct
 8. No Fluff: Do NOT use phrases like "Based on the document...", "The system found...", or "According to...". Start with the answer immediately.
@@ -234,8 +338,8 @@ Instructions:
   		**Keywords:** ไร, อะไร, ไหน, ที่ไหน, หรือไม่, ไหม, มั๊ย, เท่าไหร่, กี่บาท, ยัง (Yet), ใคร (Who).
 		**Action:** Start with the answer immediately. No filler.
     	**Constraint:** Maximum 25 words.
-    	**Example:** "ดอกเบี้ย 5% ต่อปี สำหรับลูกค้าใหม่"
-	8.2 Provide ONLY the final synthesized answer:`, question, combinedAnswers)
+    	**Example:** "ดอกเบี้ย 5%% ต่อปี สำหรับลูกค้าใหม่"
+	8.2 Provide ONLY the final synthesized answer:`, question, combinedAnswers, documentContext.String())
 
 	fmt.Printf("DEBUG: Calling Bedrock Converse API...\n")
 
@@ -281,7 +385,8 @@ Instructions:
 			if len(msg.Value.Content) > 0 {
 				if textBlock, ok := msg.Value.Content[0].(*rttypes.ContentBlockMemberText); ok {
 					fmt.Printf("DEBUG: Successfully extracted synthesized text\n")
-					return textBlock.Value, nil
+					cleanedAnswer := utils.CleanMarkdown(textBlock.Value)
+					return cleanedAnswer, nil
 				}
 			}
 		}

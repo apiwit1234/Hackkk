@@ -37,9 +37,9 @@ func LoadConfig() (*Config, error) {
 	config := &Config{
 		AWSRegion:                      region,
 		EmbeddingModelId:               getEnv("BEDROCK_EMBEDDING_MODEL", "amazon.titan-embed-text-v2:0"),
-		KnowledgeBaseIds:               []string{"ZHYAWGPBRS", "I2XCL5FZAQ", "CC46VWUAVL", "FUYZ1OB4WO", "R1DHVCY9K7", "O8J75DOLZN", "CRM0MV7YIW"}, // Multiple Knowledge Base IDs
-		GenerativeModelId:              getEnv("BEDROCK_GENERATIVE_MODEL", "anthropic.claude-haiku-4-5-20251001-v1:0"),                             // Claude 3.5 Haiku
-		SystemInstructions:             strings.TrimSpace(questionSearchInstructions),                                                              // Backward compatibility
+		KnowledgeBaseIds:               []string{"ZHYAWGPBRS", "I2XCL5FZAQ", "CC46VWUAVL"},                             // Multiple Knowledge Base IDs
+		GenerativeModelId:              getEnv("BEDROCK_GENERATIVE_MODEL", "anthropic.claude-haiku-4-5-20251001-v1:0"), // Claude 3.5 Haiku
+		SystemInstructions:             strings.TrimSpace(questionSearchInstructions),                                  // Backward compatibility
 		QuestionSearchInstructions:     strings.TrimSpace(questionSearchInstructions),
 		DocumentComparisonInstructions: strings.TrimSpace(documentComparisonInstructions),
 		MaxQuestionLength:              getEnvAsInt("MAX_QUESTION_LENGTH", 1000),
