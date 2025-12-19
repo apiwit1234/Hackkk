@@ -10,6 +10,25 @@ import (
 	"github.com/gorilla/mux"
 )
 
+// CORS middleware
+func CORSMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Set CORS headers
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With")
+		w.Header().Set("Access-Control-Max-Age", "3600")
+
+		// Handle preflight OPTIONS request
+		if r.Method == "OPTIONS" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
+
 type Response struct {
 	Message string `json:"message"`
 	Status  int    `json:"status"`
@@ -23,16 +42,19 @@ type ErrorResponse struct {
 func SetupRoutes(questionSearchService services.QuestionSearchService, documentDetailsService services.DocumentDetailsService, maxQuestionLength int) *mux.Router {
 	router := mux.NewRouter()
 
+	// Apply CORS middleware to all routes
+	router.Use(CORSMiddleware)
+
 	// Health check endpoint
-	router.HandleFunc("/api/teletubpax/healthcheck", HealthCheckHandler).Methods("GET")
+	router.HandleFunc("/api/teletubpax/healthcheck", HealthCheckHandler).Methods("GET", "OPTIONS")
 
 	// Question search endpoint
 	questionSearchHandler := NewQuestionSearchHandler(questionSearchService, maxQuestionLength)
-	router.HandleFunc("/api/teletubpax/question-search", questionSearchHandler.Handle).Methods("POST")
+	router.HandleFunc("/api/teletubpax/question-search", questionSearchHandler.Handle).Methods("POST", "OPTIONS")
 
 	// Document details endpoint
 	documentDetailsHandler := NewDocumentDetailsHandler(documentDetailsService)
-	router.HandleFunc("/api/teletubpax/last-update-documentdetails", documentDetailsHandler.Handle).Methods("GET")
+	router.HandleFunc("/api/teletubpax/last-update-document", documentDetailsHandler.Handle).Methods("GET", "OPTIONS")
 
 	// 404 handler
 	router.NotFoundHandler = http.HandlerFunc(NotFoundHandler)

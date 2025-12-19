@@ -18,7 +18,8 @@ class BedrockApiStack(Stack):
         # Get configuration from context or use defaults
         aws_region = self.node.try_get_context("aws_region") or "us-east-1"
         embedding_model = self.node.try_get_context("embedding_model") or "amazon.titan-embed-text-v2"
-        knowledge_base_id = "R1DHVCY9K7"  # Hardcoded Knowledge Base ID
+        # Multiple Knowledge Base IDs - hardcoded in Go code (config/bedrock_config.go)
+        knowledge_base_ids = ["ZHYAWGPBRS", "I2XCL5FZAQ", "CC46VWUAVL", "FUYZ1OB4WO", "R1DHVCY9K7", "O8J75DOLZN", "CRM0MV7YIW"]
         max_question_length = self.node.try_get_context("max_question_length") or "1000"
         retry_attempts = self.node.try_get_context("retry_attempts") or "3"
 
@@ -49,7 +50,11 @@ class BedrockApiStack(Stack):
             )
         )
 
-        # Add Bedrock Agent Runtime permissions for Knowledge Base
+        # Add Bedrock Agent Runtime permissions for Knowledge Bases
+        kb_resources = [
+            f"arn:aws:bedrock:{aws_region}:{self.account}:knowledge-base/{kb_id}"
+            for kb_id in knowledge_base_ids
+        ]
         lambda_role.add_to_policy(
             iam.PolicyStatement(
                 effect=iam.Effect.ALLOW,
@@ -58,8 +63,7 @@ class BedrockApiStack(Stack):
                     "bedrock:RetrieveAndGenerate",
                     "bedrock:InvokeModel",
                 ],
-                resources=[
-                    f"arn:aws:bedrock:{aws_region}:{self.account}:knowledge-base/{knowledge_base_id}",
+                resources=kb_resources + [
                     f"arn:aws:bedrock:*::foundation-model/*",
                     "arn:aws:bedrock:*:*:inference-profile/*",
                 ],
@@ -80,7 +84,8 @@ class BedrockApiStack(Stack):
             environment={
                 "BEDROCK_REGION": aws_region,
                 "BEDROCK_EMBEDDING_MODEL": embedding_model,
-                "BEDROCK_KB_ID": knowledge_base_id,
+                # Note: Knowledge Base IDs are hardcoded in Go code (config/bedrock_config.go)
+                # No need to pass BEDROCK_KB_ID as environment variable
                 "MAX_QUESTION_LENGTH": max_question_length,
                 "RETRY_ATTEMPTS": retry_attempts,
                 "AWS_LWA_INVOKE_MODE": "response_stream",

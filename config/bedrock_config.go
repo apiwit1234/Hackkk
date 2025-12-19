@@ -8,19 +8,24 @@ import (
 	"strings"
 )
 
-//go:embed system_instructions.txt
-var systemInstructions string
+//go:embed question_search_instructions.txt
+var questionSearchInstructions string
+
+//go:embed document_comparison_instructions.txt
+var documentComparisonInstructions string
 
 type Config struct {
-	AWSRegion          string
-	EmbeddingModelId   string
-	KnowledgeBaseId    string
-	GenerativeModelId  string
-	SystemInstructions string
-	MaxQuestionLength  int
-	RetryAttempts      int
-	OpenSearchEndpoint string
-	OpenSearchIndex    string
+	AWSRegion                      string
+	EmbeddingModelId               string
+	KnowledgeBaseIds               []string
+	GenerativeModelId              string
+	SystemInstructions             string // Deprecated: Use QuestionSearchInstructions
+	QuestionSearchInstructions     string
+	DocumentComparisonInstructions string
+	MaxQuestionLength              int
+	RetryAttempts                  int
+	OpenSearchEndpoint             string
+	OpenSearchIndex                string
 }
 
 func LoadConfig() (*Config, error) {
@@ -30,15 +35,17 @@ func LoadConfig() (*Config, error) {
 	}
 
 	config := &Config{
-		AWSRegion:          region,
-		EmbeddingModelId:   getEnv("BEDROCK_EMBEDDING_MODEL", "amazon.titan-embed-text-v2:0"),
-		KnowledgeBaseId:    "R1DHVCY9K7",                                                                   // Hardcoded Knowledge Base ID
-		GenerativeModelId:  getEnv("BEDROCK_GENERATIVE_MODEL", "anthropic.claude-haiku-4-5-20251001-v1:0"), // Claude 3.5 Haiku
-		SystemInstructions: strings.TrimSpace(systemInstructions),
-		MaxQuestionLength:  getEnvAsInt("MAX_QUESTION_LENGTH", 1000),
-		RetryAttempts:      getEnvAsInt("RETRY_ATTEMPTS", 3),
-		OpenSearchEndpoint: getEnv("OPENSEARCH_ENDPOINT", ""),
-		OpenSearchIndex:    getEnv("OPENSEARCH_INDEX", "bedrock-knowledge-base-default-index"),
+		AWSRegion:                      region,
+		EmbeddingModelId:               getEnv("BEDROCK_EMBEDDING_MODEL", "amazon.titan-embed-text-v2:0"),
+		KnowledgeBaseIds:               []string{"ZHYAWGPBRS", "I2XCL5FZAQ", "CC46VWUAVL", "FUYZ1OB4WO", "R1DHVCY9K7", "O8J75DOLZN", "CRM0MV7YIW"}, // Multiple Knowledge Base IDs
+		GenerativeModelId:              getEnv("BEDROCK_GENERATIVE_MODEL", "anthropic.claude-haiku-4-5-20251001-v1:0"),                             // Claude 3.5 Haiku
+		SystemInstructions:             strings.TrimSpace(questionSearchInstructions),                                                              // Backward compatibility
+		QuestionSearchInstructions:     strings.TrimSpace(questionSearchInstructions),
+		DocumentComparisonInstructions: strings.TrimSpace(documentComparisonInstructions),
+		MaxQuestionLength:              getEnvAsInt("MAX_QUESTION_LENGTH", 1000),
+		RetryAttempts:                  getEnvAsInt("RETRY_ATTEMPTS", 3),
+		OpenSearchEndpoint:             getEnv("OPENSEARCH_ENDPOINT", ""),
+		OpenSearchIndex:                getEnv("OPENSEARCH_INDEX", "bedrock-knowledge-base-default-index"),
 	}
 
 	if err := config.Validate(); err != nil {
@@ -55,8 +62,8 @@ func (c *Config) Validate() error {
 	if c.EmbeddingModelId == "" {
 		return fmt.Errorf("BEDROCK_EMBEDDING_MODEL is required")
 	}
-	if c.KnowledgeBaseId == "" {
-		return fmt.Errorf("BEDROCK_KB_ID is required")
+	if len(c.KnowledgeBaseIds) == 0 {
+		return fmt.Errorf("at least one BEDROCK_KB_ID is required")
 	}
 	if c.GenerativeModelId == "" {
 		return fmt.Errorf("BEDROCK_GENERATIVE_MODEL is required")

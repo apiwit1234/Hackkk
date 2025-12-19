@@ -53,11 +53,24 @@ func (s *OpenSearchDocumentService) GetLastUpdateDocuments(ctx context.Context) 
 		olderDoc := s.findOlderVersion(documents, topic, currentVersion, i)
 
 		if olderDoc != nil {
+			olderVersion, _ := olderDoc["version"].(int)
+			log.Info("Found older version for comparison", map[string]interface{}{
+				"topic":           topic,
+				"current_version": currentVersion,
+				"older_version":   olderVersion,
+			})
+
 			// Compare versions using Bedrock
 			newerContent, _ := doc["content"].(string)
 			olderContent, _ := olderDoc["content"].(string)
 
 			if newerContent != "" && olderContent != "" {
+				log.Info("Comparing document versions", map[string]interface{}{
+					"topic":                topic,
+					"newer_content_length": len(newerContent),
+					"older_content_length": len(olderContent),
+				})
+
 				changeSummary, err := s.openSearchClient.CompareDocumentVersions(ctx, newerContent, olderContent, topic)
 				if err != nil {
 					log.Warn("Failed to compare document versions", map[string]interface{}{
@@ -66,8 +79,18 @@ func (s *OpenSearchDocumentService) GetLastUpdateDocuments(ctx context.Context) 
 					})
 					documents[i]["changeSummary"] = "Unable to compare versions"
 				} else {
+					log.Info("Version comparison successful", map[string]interface{}{
+						"topic":          topic,
+						"summary_length": len(changeSummary),
+					})
 					documents[i]["changeSummary"] = changeSummary
 				}
+			} else {
+				log.Warn("Missing content for version comparison", map[string]interface{}{
+					"topic":             topic,
+					"has_newer_content": newerContent != "",
+					"has_older_content": olderContent != "",
+				})
 			}
 		}
 

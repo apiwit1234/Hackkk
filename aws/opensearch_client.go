@@ -22,20 +22,22 @@ type OpenSearchClient interface {
 }
 
 type BedrockOpenSearchClient struct {
-	client            *bedrockagentruntime.Client
-	knowledgeBaseId   string
-	region            string
-	kbClient          KnowledgeBaseClient
-	generativeModelId string
+	client                         *bedrockagentruntime.Client
+	knowledgeBaseId                string
+	region                         string
+	kbClient                       KnowledgeBaseClient
+	generativeModelId              string
+	documentComparisonInstructions string
 }
 
-func NewBedrockOpenSearchClient(cfg aws.Config, knowledgeBaseId string, region string, kbClient KnowledgeBaseClient, generativeModelId string) *BedrockOpenSearchClient {
+func NewBedrockOpenSearchClient(cfg aws.Config, knowledgeBaseId string, region string, kbClient KnowledgeBaseClient, generativeModelId string, documentComparisonInstructions string) *BedrockOpenSearchClient {
 	return &BedrockOpenSearchClient{
-		client:            bedrockagentruntime.NewFromConfig(cfg),
-		knowledgeBaseId:   knowledgeBaseId,
-		region:            region,
-		kbClient:          kbClient,
-		generativeModelId: generativeModelId,
+		client:                         bedrockagentruntime.NewFromConfig(cfg),
+		knowledgeBaseId:                knowledgeBaseId,
+		region:                         region,
+		kbClient:                       kbClient,
+		generativeModelId:              generativeModelId,
+		documentComparisonInstructions: documentComparisonInstructions,
 	}
 }
 
@@ -228,6 +230,11 @@ func (c *BedrockOpenSearchClient) GetLastUpdateDocuments(ctx context.Context) ([
 		// 5. changeSummary - compare with older version if exists
 		simplified["changeSummary"] = ""
 
+		// 6. Keep content for version comparison (will be removed by service layer)
+		if content, ok := doc["content"].(string); ok {
+			simplified["content"] = content
+		}
+
 		simplifiedDocs = append(simplifiedDocs, simplified)
 	}
 
@@ -328,8 +335,10 @@ func (c *BedrockOpenSearchClient) convertS3UriToPublicUrl(s3Uri string) string {
 
 // CompareDocumentVersions uses Bedrock to compare two document versions and summarize changes
 func (c *BedrockOpenSearchClient) CompareDocumentVersions(ctx context.Context, newerContent, olderContent, topic string) (string, error) {
-	// Create a prompt for Bedrock to compare the documents
-	prompt := fmt.Sprintf(`Compare these two versions of the document "%s" and provide a summary of what changed.
+	// Create a prompt using the document comparison instructions
+	prompt := fmt.Sprintf(`%s
+
+Document Topic: %s
 
 Older Version:
 %s
@@ -337,13 +346,7 @@ Older Version:
 Newer Version:
 %s
 
-Please provide a concise summary of the changes in JSON format with these fields:
-{
-  "version": "version number or identifier",
-  "changeSummary": "brief description of what changed"
-}
-
-Focus on the main differences and keep the summary brief and clear.`, topic, olderContent, newerContent)
+Please analyze and provide the comparison in JSON format.`, c.documentComparisonInstructions, topic, olderContent, newerContent)
 
 	// Use the KB client to query Bedrock
 	answer, _, err := c.kbClient.QueryKnowledgeBase(ctx, prompt, false)

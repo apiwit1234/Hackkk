@@ -49,8 +49,8 @@ func init() {
 
 	// Create AWS clients
 	embeddingClient := aws.NewBedrockEmbeddingClient(awsCfg, cfg.EmbeddingModelId)
-	kbClient := aws.NewBedrockKBClient(awsCfg, cfg.KnowledgeBaseId, cfg.GenerativeModelId, cfg.AWSRegion, cfg.SystemInstructions)
-	openSearchClient := aws.NewBedrockOpenSearchClient(awsCfg, cfg.KnowledgeBaseId, cfg.AWSRegion, kbClient, cfg.GenerativeModelId)
+	kbClient := aws.NewBedrockKBClient(awsCfg, cfg.KnowledgeBaseIds, cfg.GenerativeModelId, cfg.AWSRegion, cfg.QuestionSearchInstructions)
+	openSearchClient := aws.NewBedrockOpenSearchClient(awsCfg, cfg.KnowledgeBaseIds[0], cfg.AWSRegion, kbClient, cfg.GenerativeModelId, cfg.DocumentComparisonInstructions)
 
 	// Create services
 	questionSearchService := services.NewBedrockQuestionSearchService(

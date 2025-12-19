@@ -66,12 +66,12 @@ func main() {
 	}
 
 	log.Printf("Logger initialized with level: %s", logLevel)
-	log.Printf("Configuration loaded: Region=%s, Model=%s, KB=%s", cfg.AWSRegion, cfg.EmbeddingModelId, cfg.KnowledgeBaseId)
+	log.Printf("Configuration loaded: Region=%s, Model=%s, KBs=%v", cfg.AWSRegion, cfg.EmbeddingModelId, cfg.KnowledgeBaseIds)
 
 	// Create AWS clients
 	embeddingClient := aws.NewBedrockEmbeddingClient(awsCfg, cfg.EmbeddingModelId)
-	kbClient := aws.NewBedrockKBClient(awsCfg, cfg.KnowledgeBaseId, cfg.GenerativeModelId, cfg.AWSRegion, cfg.SystemInstructions)
-	openSearchClient := aws.NewBedrockOpenSearchClient(awsCfg, cfg.KnowledgeBaseId, cfg.AWSRegion, kbClient, cfg.GenerativeModelId)
+	kbClient := aws.NewBedrockKBClient(awsCfg, cfg.KnowledgeBaseIds, cfg.GenerativeModelId, cfg.AWSRegion, cfg.QuestionSearchInstructions)
+	openSearchClient := aws.NewBedrockOpenSearchClient(awsCfg, cfg.KnowledgeBaseIds[0], cfg.AWSRegion, kbClient, cfg.GenerativeModelId, cfg.DocumentComparisonInstructions)
 	log.Println("AWS Bedrock clients initialized")
 
 	// Create services

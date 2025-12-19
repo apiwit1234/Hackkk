@@ -2,6 +2,7 @@ package routing
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 
 	"teletubpax-api/logger"
@@ -11,6 +12,7 @@ import (
 type DocumentDetailsResponse struct {
 	Documents []map[string]interface{} `json:"documents"`
 	Total     int                      `json:"total"`
+	Summary   string                   `json:"summary"`
 }
 
 type DocumentDetailsHandler struct {
@@ -21,6 +23,26 @@ func NewDocumentDetailsHandler(service services.DocumentDetailsService) *Documen
 	return &DocumentDetailsHandler{
 		service: service,
 	}
+}
+
+func (h *DocumentDetailsHandler) generateSummary(documents []map[string]interface{}) string {
+	if len(documents) == 0 {
+		return "No documents found"
+	}
+
+	// Count documents with version changes
+	withChanges := 0
+	for _, doc := range documents {
+		if changeSummary, ok := doc["changeSummary"].(string); ok && changeSummary != "" && changeSummary != "Unable to compare versions" {
+			withChanges++
+		}
+	}
+
+	// Generate summary message
+	if withChanges > 0 {
+		return fmt.Sprintf("Retrieved %d latest documents, %d with version changes detected", len(documents), withChanges)
+	}
+	return fmt.Sprintf("Retrieved %d latest documents", len(documents))
 }
 
 func (h *DocumentDetailsHandler) Handle(w http.ResponseWriter, r *http.Request) {
@@ -44,10 +66,14 @@ func (h *DocumentDetailsHandler) Handle(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	// Generate summary
+	summary := h.generateSummary(documents)
+
 	// Format success response
 	response := DocumentDetailsResponse{
 		Documents: documents,
 		Total:     len(documents),
+		Summary:   summary,
 	}
 
 	log.Info("Document details retrieved successfully", map[string]interface{}{

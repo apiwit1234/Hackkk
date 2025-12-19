@@ -52,8 +52,8 @@ func (s *BedrockQuestionSearchService) SearchAnswer(ctx context.Context, questio
 	}
 
 	err := utils.RetryWithBackoff(ctx, retryConfig, func() error {
-		// Query knowledge base directly with question text
-		ans, docs, err := s.knowledgeBaseClient.QueryKnowledgeBase(ctx, question, enableRelateDocument)
+		// Query multiple knowledge bases in parallel
+		ans, docs, err := s.knowledgeBaseClient.QueryMultipleKnowledgeBases(ctx, question, enableRelateDocument)
 		if err != nil {
 			log.Error("Knowledge base query failed", map[string]interface{}{
 				"error": err.Error(),
@@ -68,9 +68,9 @@ func (s *BedrockQuestionSearchService) SearchAnswer(ctx context.Context, questio
 	if err != nil {
 		duration := time.Since(startTime)
 		log.Error("Question search failed after retries", map[string]interface{}{
-			"error":        err.Error(),
-			"duration_ms":  duration.Milliseconds(),
-			"retry_count":  s.config.RetryAttempts,
+			"error":       err.Error(),
+			"duration_ms": duration.Milliseconds(),
+			"retry_count": s.config.RetryAttempts,
 		})
 		return "", nil, err
 	}
@@ -78,9 +78,9 @@ func (s *BedrockQuestionSearchService) SearchAnswer(ctx context.Context, questio
 	// Log successful response
 	duration := time.Since(startTime)
 	log.Info("Question search completed successfully", map[string]interface{}{
-		"duration_ms":      duration.Milliseconds(),
-		"answer_length":    len(answer),
-		"document_count":   len(relatedDocuments),
+		"duration_ms":    duration.Milliseconds(),
+		"answer_length":  len(answer),
+		"document_count": len(relatedDocuments),
 	})
 
 	return answer, relatedDocuments, nil
