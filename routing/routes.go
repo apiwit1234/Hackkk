@@ -39,7 +39,7 @@ type ErrorResponse struct {
 	Status int    `json:"status"`
 }
 
-func SetupRoutes(questionSearchService services.QuestionSearchService, documentDetailsService services.DocumentDetailsService, maxQuestionLength int) *mux.Router {
+func SetupRoutes(questionSearchService services.QuestionSearchService, documentDetailsService services.DocumentDetailsService, documentSearchService services.DocumentSearchService, maxQuestionLength int) *mux.Router {
 	router := mux.NewRouter()
 
 	// Apply CORS middleware to all routes
@@ -48,15 +48,15 @@ func SetupRoutes(questionSearchService services.QuestionSearchService, documentD
 	// Health check endpoint
 	router.HandleFunc("/api/teletubpax/healthcheck", HealthCheckHandler).Methods("GET", "OPTIONS")
 
-	// Question search endpoint
 	questionSearchHandler := NewQuestionSearchHandler(questionSearchService, maxQuestionLength)
 	router.HandleFunc("/api/teletubpax/question-search", questionSearchHandler.Handle).Methods("POST", "OPTIONS")
 
-	// Document details endpoint
 	documentDetailsHandler := NewDocumentDetailsHandler(documentDetailsService)
 	router.HandleFunc("/api/teletubpax/last-update-document", documentDetailsHandler.Handle).Methods("GET", "OPTIONS")
 
-	// 404 handler
+	documentSearchHandler := NewDocumentSearchHandler(documentSearchService, maxQuestionLength)
+	router.HandleFunc("/api/teletubpax/document-search", documentSearchHandler.Handle).Methods("POST")
+
 	router.NotFoundHandler = http.HandlerFunc(NotFoundHandler)
 
 	return router
